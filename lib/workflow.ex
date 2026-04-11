@@ -249,7 +249,7 @@ defmodule Runic.Workflow do
 
   @type t() :: %__MODULE__{
           name: String.t(),
-          graph: Graph.t(),
+          graph: Multigraph.t(),
           hash: binary(),
           # name -> component hash
           components: map(),
@@ -334,11 +334,11 @@ defmodule Runic.Workflow do
   end
 
   defp new_graph do
-    Graph.new(
+    Multigraph.new(
       vertex_identifier: &Components.vertex_id_of/1,
       multigraph: true
     )
-    |> Graph.add_vertex(root(), :root)
+    |> Multigraph.add_vertex(root(), :root)
   end
 
   @doc false
@@ -462,8 +462,8 @@ defmodule Runic.Workflow do
   defp resolve_component_name(_workflow, %{name: name}) when not is_nil(name), do: name
 
   defp resolve_component_name(%__MODULE__{graph: graph}, vertex) do
-    (Graph.in_edges(graph, vertex, by: :flow) ++
-       Graph.in_edges(graph, vertex, by: :component_of))
+    (Multigraph.in_edges(graph, vertex, by: :flow) ++
+       Multigraph.in_edges(graph, vertex, by: :component_of))
     |> Enum.find_value(fn edge ->
       case edge.v1 do
         %Rule{name: name} -> name
@@ -765,7 +765,7 @@ defmodule Runic.Workflow do
 
       nil ->
         # The node might be a sub-component; find the component that owns it via :component_of
-        case Graph.in_edges(g, node, by: :component_of) do
+        case Multigraph.in_edges(g, node, by: :component_of) do
           [%{v1: owner} | _] -> owner
           _ -> nil
         end
@@ -1050,8 +1050,8 @@ defmodule Runic.Workflow do
     join = Map.get(wf.graph.vertices, e.join_hash)
 
     if fact && join do
-      case Graph.update_labelled_edge(wf.graph, fact, join, e.from_label, label: e.to_label) do
-        %Graph{} = updated -> %{wf | graph: updated}
+      case Multigraph.update_labelled_edge(wf.graph, fact, join, e.from_label, label: e.to_label) do
+        %Multigraph{} = updated -> %{wf | graph: updated}
         _ -> wf
       end
     else
@@ -1278,7 +1278,7 @@ defmodule Runic.Workflow do
         properties = restore_meta_ref_properties(ro.reaction, ro.properties)
 
         reaction_edge =
-          Graph.Edge.new(
+          Multigraph.Edge.new(
             ro.from,
             ro.to,
             label: ro.reaction,
@@ -1288,7 +1288,7 @@ defmodule Runic.Workflow do
 
         %__MODULE__{
           wrk
-          | graph: Graph.add_edge(wrk.graph, reaction_edge)
+          | graph: Multigraph.add_edge(wrk.graph, reaction_edge)
         }
 
       %RunnableDispatched{} = event, wrk ->
@@ -1447,8 +1447,8 @@ defmodule Runic.Workflow do
       Map.keys(g.edge_index)
       |> Enum.reject(&(&1 == :flow))
 
-    for %Graph.Edge{} = edge <-
-          Graph.edges(g, by: reaction_edge_kinds) do
+    for %Multigraph.Edge{} = edge <-
+          Multigraph.edges(g, by: reaction_edge_kinds) do
       # Strip getter_fn from :meta_ref edges - it cannot be serialized
       # and will be rebuilt during from_log restoration
       properties = strip_getter_fn_for_serialization(edge.label, edge.properties)
@@ -1531,7 +1531,7 @@ defmodule Runic.Workflow do
         |> Workflow.add(step2, to: :add)
 
       component_graph = Workflow.connected_components(workflow)
-      # => Graph with :add and :double vertices, edge :add -> :double
+      # => Multigraph with :add and :double vertices, edge :add -> :double
   """
   def connected_components(%__MODULE__{graph: g, components: components}) do
     component_vertices =
@@ -1539,17 +1539,17 @@ defmodule Runic.Workflow do
         {hash, Map.get(g.vertices, hash)}
       end)
 
-    component_edges = Graph.edges(g, by: :connects_to)
+    component_edges = Multigraph.edges(g, by: :connects_to)
 
-    Enum.reduce(component_edges, Graph.new(type: :directed), fn edge, cg ->
+    Enum.reduce(component_edges, Multigraph.new(type: :directed), fn edge, cg ->
       v1 = Map.get(component_vertices, edge.v1.hash, edge.v1)
       v2 = Map.get(component_vertices, edge.v2.hash, edge.v2)
-      Graph.add_edge(cg, v1, v2, label: :connects_to)
+      Multigraph.add_edge(cg, v1, v2, label: :connects_to)
     end)
     |> then(fn cg ->
       # Ensure all registered components appear as vertices, even if unconnected
       Enum.reduce(component_vertices, cg, fn {_hash, vertex}, acc ->
-        if vertex, do: Graph.add_vertex(acc, vertex), else: acc
+        if vertex, do: Multigraph.add_vertex(acc, vertex), else: acc
       end)
     end)
   end
@@ -1571,7 +1571,7 @@ defmodule Runic.Workflow do
     component = get_component(workflow, component_name)
 
     workflow.graph
-    |> Graph.out_edges(component, by: :component_of)
+    |> Multigraph.out_edges(component, by: :component_of)
     |> Enum.map(fn edge -> {edge.properties.kind, edge.v2} end)
   end
 
@@ -1596,7 +1596,7 @@ defmodule Runic.Workflow do
     arity = Components.arity_of(component)
 
     g
-    |> Graph.vertices()
+    |> Multigraph.vertices()
     |> Enum.filter(fn %{__struct__: module} = v ->
       v_arity = Components.arity_of(v)
 
@@ -1794,7 +1794,7 @@ defmodule Runic.Workflow do
 
   defp do_remove_component(workflow, component, component_name) do
     # 1. Find all invokable nodes owned by this component via :component_of edges
-    owned_edges = Graph.out_edges(workflow.graph, component, by: :component_of)
+    owned_edges = Multigraph.out_edges(workflow.graph, component, by: :component_of)
     owned_nodes = Enum.map(owned_edges, & &1.v2)
 
     # Include the component itself if it's also an invokable node (e.g. Step, Condition, Accumulator)
@@ -1810,7 +1810,7 @@ defmodule Runic.Workflow do
     {safe_to_remove, _shared} =
       Enum.split_with(all_owned, fn node ->
         owners =
-          Graph.in_edges(workflow.graph, node, by: :component_of)
+          Multigraph.in_edges(workflow.graph, node, by: :component_of)
           |> Enum.map(& &1.v1)
           |> Enum.reject(&(&1 == component))
 
@@ -1825,7 +1825,7 @@ defmodule Runic.Workflow do
     upstream_parents =
       safe_to_remove
       |> Enum.flat_map(fn node ->
-        Graph.in_edges(workflow.graph, node, by: :flow)
+        Multigraph.in_edges(workflow.graph, node, by: :flow)
         |> Enum.reject(fn edge ->
           case edge.v1 do
             %Root{} -> false
@@ -1842,7 +1842,7 @@ defmodule Runic.Workflow do
     downstream_children =
       safe_to_remove
       |> Enum.flat_map(fn node ->
-        Graph.out_edges(workflow.graph, node, by: :flow)
+        Multigraph.out_edges(workflow.graph, node, by: :flow)
         |> Enum.reject(fn edge -> MapSet.member?(safe_hashes, edge.v2.hash) end)
         |> Enum.map(& &1.v2)
       end)
@@ -1853,7 +1853,7 @@ defmodule Runic.Workflow do
     graph =
       Enum.reduce(upstream_parents, workflow.graph, fn parent, g ->
         Enum.reduce(downstream_children, g, fn child, g ->
-          g = Graph.add_edge(g, parent, child, label: :flow, weight: 0)
+          g = Multigraph.add_edge(g, parent, child, label: :flow, weight: 0)
 
           # Find the owning components for the parent/child to add :connects_to edges
           temp_wrk = %{workflow | graph: g}
@@ -1861,7 +1861,7 @@ defmodule Runic.Workflow do
           child_component = find_owning_component(temp_wrk, child)
 
           if parent_component && child_component && parent_component != child_component do
-            Graph.add_edge(g, parent_component, child_component, label: :connects_to)
+            Multigraph.add_edge(g, parent_component, child_component, label: :connects_to)
           else
             g
           end
@@ -1869,7 +1869,7 @@ defmodule Runic.Workflow do
       end)
 
     # 5. Delete the safe-to-remove vertices (also removes all their edges)
-    graph = Graph.delete_vertices(graph, safe_to_remove)
+    graph = Multigraph.delete_vertices(graph, safe_to_remove)
 
     # 6. Remove from components registry (including any sub-component entries like {name, :kind})
     components =
@@ -2048,7 +2048,7 @@ defmodule Runic.Workflow do
     cmp = get_component(wrk, component_name)
 
     for edge <-
-          Graph.out_edges(wrk.graph, cmp,
+          Multigraph.out_edges(wrk.graph, cmp,
             by: :component_of,
             where: fn edge ->
               edge.properties[:kind] == subcomponent_kind_or_name or
@@ -2143,14 +2143,14 @@ defmodule Runic.Workflow do
     next_steps(g, parent_step)
   end
 
-  def next_steps(%Graph{} = g, parent_steps) when is_list(parent_steps) do
+  def next_steps(%Multigraph{} = g, parent_steps) when is_list(parent_steps) do
     Enum.flat_map(parent_steps, fn parent_step ->
       next_steps(g, parent_step)
     end)
   end
 
-  def next_steps(%Graph{} = g, parent_step) do
-    for e <- Graph.out_edges(g, parent_step, by: :flow), do: e.v2
+  def next_steps(%Multigraph{} = g, parent_step) do
+    for e <- Multigraph.out_edges(g, parent_step, by: :flow), do: e.v2
   end
 
   @doc false
@@ -2194,42 +2194,42 @@ defmodule Runic.Workflow do
   #       %__MODULE__{graph: g2, components: c2, mapped: m2} = _workflow2
   #     ) do
   #   merged_graph =
-  #     Graph.Reducers.Bfs.reduce(g2, g1, fn
+  #     Multigraph.Reducers.Bfs.reduce(g2, g1, fn
   #       %Root{} = root, g ->
-  #         out_edges = Enum.uniq(Graph.out_edges(g, root) ++ Graph.out_edges(g2, root))
+  #         out_edges = Enum.uniq(Multigraph.out_edges(g, root) ++ Multigraph.out_edges(g2, root))
 
   #         g =
-  #           Enum.reduce(out_edges, Graph.add_vertex(g, root), fn edge, g ->
-  #             Graph.add_edge(g, edge)
+  #           Enum.reduce(out_edges, Multigraph.add_vertex(g, root), fn edge, g ->
+  #             Multigraph.add_edge(g, edge)
   #           end)
 
   #         {:next, g}
 
   #       generation, g when is_integer(generation) ->
-  #         out_edges = Enum.uniq(Graph.out_edges(g, generation) ++ Graph.out_edges(g2, generation))
+  #         out_edges = Enum.uniq(Multigraph.out_edges(g, generation) ++ Multigraph.out_edges(g2, generation))
 
   #         g =
   #           g
-  #           |> Graph.add_vertex(generation)
-  #           |> Graph.add_edges(out_edges)
+  #           |> Multigraph.add_vertex(generation)
+  #           |> Multigraph.add_edges(out_edges)
 
   #         {:next, g}
 
   #       v, g ->
-  #         g = Graph.add_vertex(g, v, v.hash)
+  #         g = Multigraph.add_vertex(g, v, v.hash)
 
-  #         out_edges = Enum.uniq(Graph.out_edges(g, v) ++ Graph.out_edges(g2, v))
+  #         out_edges = Enum.uniq(Multigraph.out_edges(g, v) ++ Multigraph.out_edges(g2, v))
 
   #         g =
   #           Enum.reduce(out_edges, g, fn
   #             %{v1: %Fact{} = _fact_v1, v2: _v2, label: :generation} = memory2_edge, mem ->
-  #               Graph.add_edge(mem, memory2_edge)
+  #               Multigraph.add_edge(mem, memory2_edge)
 
   #             %{v1: %Fact{} = fact_v1, v2: v2, label: label} = memory2_edge, mem
   #             when label in [:matchable, :runnable, :ran] ->
   #               out_edge_labels_of_into_mem_for_edge =
   #                 mem
-  #                 |> Graph.out_edges(fact_v1)
+  #                 |> Multigraph.out_edges(fact_v1)
   #                 |> Enum.filter(&(&1.v2 == v2))
   #                 |> MapSet.new(& &1.label)
 
@@ -2240,14 +2240,14 @@ defmodule Runic.Workflow do
 
   #                 label == :ran and
   #                     MapSet.member?(out_edge_labels_of_into_mem_for_edge, :runnable) ->
-  #                   Graph.update_labelled_edge(mem, fact_v1, v2, :runnable, label: :ran)
+  #                   Multigraph.update_labelled_edge(mem, fact_v1, v2, :runnable, label: :ran)
 
   #                 true ->
-  #                   Graph.add_edge(mem, memory2_edge)
+  #                   Multigraph.add_edge(mem, memory2_edge)
   #               end
 
   #             %{v1: _v1, v2: _v2} = memory2_edge, mem ->
-  #               Graph.add_edge(mem, memory2_edge)
+  #               Multigraph.add_edge(mem, memory2_edge)
   #           end)
 
   #         {:next, g}
@@ -2304,7 +2304,7 @@ defmodule Runic.Workflow do
       [:add, :mult]
   """
   def steps(%__MODULE__{graph: g}) do
-    Enum.filter(Graph.vertices(g), &match?(%Step{}, &1))
+    Enum.filter(Multigraph.vertices(g), &match?(%Step{}, &1))
   end
 
   @doc """
@@ -2324,7 +2324,7 @@ defmodule Runic.Workflow do
       [condition] = Workflow.conditions(workflow)
   """
   def conditions(%__MODULE__{graph: g}) do
-    Enum.filter(Graph.vertices(g), &match?(%Condition{}, &1))
+    Enum.filter(Multigraph.vertices(g), &match?(%Condition{}, &1))
   end
 
   @doc false
@@ -2363,8 +2363,8 @@ defmodule Runic.Workflow do
       [5, 10]
   """
   def reactions(%__MODULE__{graph: graph}) do
-    for %Graph.Edge{} = edge <-
-          Graph.edges(
+    for %Multigraph.Edge{} = edge <-
+          Multigraph.edges(
             graph,
             by: [:produced, :ran],
             where: fn edge -> match?(%Fact{}, edge.v1) or match?(%Fact{}, edge.v2) end
@@ -2390,8 +2390,8 @@ defmodule Runic.Workflow do
       10
   """
   def productions(%__MODULE__{graph: graph}) do
-    for %Graph.Edge{} = edge <-
-          Graph.edges(graph, by: [:produced, :state_produced, :state_initiated, :reduced]) do
+    for %Multigraph.Edge{} = edge <-
+          Multigraph.edges(graph, by: [:produced, :state_produced, :state_initiated, :reduced]) do
       edge.v2
     end
   end
@@ -2419,10 +2419,10 @@ defmodule Runic.Workflow do
 
   def productions(%__MODULE__{} = wrk, component) do
     wrk.graph
-    |> Graph.out_edges(component, by: :component_of)
+    |> Multigraph.out_edges(component, by: :component_of)
     |> Enum.flat_map(fn %{v2: invokable} ->
       for edge <-
-            Graph.out_edges(wrk.graph, invokable,
+            Multigraph.out_edges(wrk.graph, invokable,
               by: [:produced, :state_produced, :state_initiated, :reduced]
             ) do
         edge.v2
@@ -2482,8 +2482,8 @@ defmodule Runic.Workflow do
       [10]
   """
   def raw_productions(%__MODULE__{graph: graph}) do
-    for %Graph.Edge{v2: %Fact{value: value}} <-
-          Graph.edges(graph, by: [:produced, :state_produced, :state_initiated, :reduced]) do
+    for %Multigraph.Edge{v2: %Fact{value: value}} <-
+          Multigraph.edges(graph, by: [:produced, :state_produced, :state_initiated, :reduced]) do
       value
     end
   end
@@ -2527,10 +2527,10 @@ defmodule Runic.Workflow do
 
   def raw_productions(%__MODULE__{} = wrk, component) do
     wrk.graph
-    |> Graph.out_edges(component, by: :component_of)
+    |> Multigraph.out_edges(component, by: :component_of)
     |> Enum.flat_map(fn %{v2: invokable} ->
-      for %Graph.Edge{v2: %Fact{value: value}} <-
-            Graph.out_edges(wrk.graph, invokable,
+      for %Multigraph.Edge{v2: %Fact{value: value}} <-
+            Multigraph.out_edges(wrk.graph, invokable,
               by: [:produced, :state_produced, :state_initiated, :reduced]
             ) do
         value
@@ -2668,7 +2668,7 @@ defmodule Runic.Workflow do
   - Produced facts have `ancestry: {producer_hash, parent_fact_hash}`
   """
   def facts(%__MODULE__{graph: graph}) do
-    for v <- Graph.vertices(graph), match?(%Fact{}, v), do: v
+    for v <- Multigraph.vertices(graph), match?(%Fact{}, v), do: v
   end
 
   @doc false
@@ -2951,12 +2951,12 @@ defmodule Runic.Workflow do
     %__MODULE__{
       wrk
       | graph:
-          Graph.Reducers.Bfs.reduce(wrk.graph, wrk.graph, fn
+          Multigraph.Reducers.Bfs.reduce(wrk.graph, wrk.graph, fn
             %Fact{} = fact, g ->
-              {:next, Graph.delete_vertex(g, fact)}
+              {:next, Multigraph.delete_vertex(g, fact)}
 
             generation, g when is_integer(generation) ->
-              {:next, Graph.delete_vertex(g, generation)}
+              {:next, Multigraph.delete_vertex(g, generation)}
 
             _node, g ->
               {:next, g}
@@ -3047,10 +3047,10 @@ defmodule Runic.Workflow do
     # Find all produced facts that don't have pending activations
     # Also exclude facts that have :ran edges - those have already been processed
     new_productions =
-      for edge <- Graph.edges(graph, by: [:produced, :state_produced, :reduced]),
+      for edge <- Multigraph.edges(graph, by: [:produced, :state_produced, :reduced]),
           fact = edge.v2,
           is_struct(fact, Fact),
-          Enum.empty?(Graph.out_edges(graph, fact, by: [:runnable, :matchable, :ran])) do
+          Enum.empty?(Multigraph.out_edges(graph, fact, by: [:runnable, :matchable, :ran])) do
         fact
       end
       |> Enum.uniq()
@@ -3256,7 +3256,7 @@ defmodule Runic.Workflow do
       :joined
     ]
 
-    Graph.edges(graph,
+    Multigraph.edges(graph,
       by: reaction_labels,
       where: fn edge -> edge.weight > ref_depth end
     )
@@ -3282,11 +3282,11 @@ defmodule Runic.Workflow do
   end
 
   defp any_match_phase_runnables?(%__MODULE__{graph: graph}) do
-    not Enum.empty?(Graph.edges(graph, by: :matchable))
+    not Enum.empty?(Multigraph.edges(graph, by: :matchable))
   end
 
   defp next_match_runnables(%__MODULE__{graph: graph}) do
-    for %{v1: fact, v2: step} <- Graph.edges(graph, by: :matchable) do
+    for %{v1: fact, v2: step} <- Multigraph.edges(graph, by: :matchable) do
       {step, fact}
     end
   end
@@ -3312,7 +3312,7 @@ defmodule Runic.Workflow do
   """
   @spec is_runnable?(Runic.Workflow.t()) :: boolean()
   def is_runnable?(%__MODULE__{graph: graph}) do
-    not Enum.empty?(Graph.edges(graph, by: [:runnable, :matchable]))
+    not Enum.empty?(Multigraph.edges(graph, by: [:runnable, :matchable]))
   end
 
   @doc """
@@ -3328,7 +3328,7 @@ defmodule Runic.Workflow do
       # => [{%Step{name: :add}, %Fact{value: 5}}, ...]
   """
   def next_runnables(%__MODULE__{graph: graph}) do
-    for %Graph.Edge{} = edge <- Graph.edges(graph, by: [:runnable, :matchable]) do
+    for %Multigraph.Edge{} = edge <- Multigraph.edges(graph, by: [:runnable, :matchable]) do
       {edge.v2, edge.v1}
     end
   end
@@ -3484,7 +3484,7 @@ defmodule Runic.Workflow do
   """
   @spec prepared_runnables(t()) :: [Runnable.t()]
   def prepared_runnables(%__MODULE__{graph: graph} = workflow) do
-    for %Graph.Edge{} = edge <- Graph.edges(graph, by: [:runnable, :matchable]),
+    for %Multigraph.Edge{} = edge <- Multigraph.edges(graph, by: [:runnable, :matchable]),
         node = edge.v2,
         fact = edge.v1,
         runnable <- prepare_node(workflow, node, fact) do
@@ -3525,8 +3525,8 @@ defmodule Runic.Workflow do
   """
   @spec prepare_for_dispatch(t()) :: {t(), [Runnable.t()]}
   def prepare_for_dispatch(%__MODULE__{graph: graph} = workflow) do
-    Graph.edges(graph, by: [:runnable, :matchable])
-    |> Enum.reduce({workflow, []}, fn %Graph.Edge{v2: node, v1: fact}, {wrk, runnables} ->
+    Multigraph.edges(graph, by: [:runnable, :matchable])
+    |> Enum.reduce({workflow, []}, fn %Multigraph.Edge{v2: node, v1: fact}, {wrk, runnables} ->
       case Invokable.prepare(node, wrk, fact) do
         {:ok, runnable} ->
           {wrk, [runnable | runnables]}
@@ -3713,13 +3713,13 @@ defmodule Runic.Workflow do
     graph =
       Enum.reduce(downstream_nodes, graph, fn node, g ->
         g
-        |> Graph.in_edges(node)
+        |> Multigraph.in_edges(node)
         |> Enum.filter(&(&1.label in [:runnable, :joined]))
         |> Enum.reduce(g, fn edge, g_acc ->
-          case Graph.update_labelled_edge(g_acc, edge.v1, edge.v2, edge.label,
+          case Multigraph.update_labelled_edge(g_acc, edge.v1, edge.v2, edge.label,
                  label: :upstream_failed
                ) do
-            %Graph{} = updated -> updated
+            %Multigraph{} = updated -> updated
             {:error, :no_such_edge} -> g_acc
           end
         end)
@@ -3741,7 +3741,7 @@ defmodule Runic.Workflow do
       do_reachable_via_flow(graph, rest, visited, acc)
     else
       visited = MapSet.put(visited, node_id)
-      children = for e <- Graph.out_edges(graph, node, by: :flow), do: e.v2
+      children = for e <- Multigraph.out_edges(graph, node, by: :flow), do: e.v2
       do_reachable_via_flow(graph, children ++ rest, visited, [node | acc])
     end
   end
@@ -3884,7 +3884,7 @@ defmodule Runic.Workflow do
       end
 
     graph
-    |> Graph.out_edges(node_vertex, by: :meta_ref)
+    |> Multigraph.out_edges(node_vertex, by: :meta_ref)
     |> Enum.map(fn edge ->
       case edge.v2 do
         %{hash: hash} ->
@@ -3920,7 +3920,7 @@ defmodule Runic.Workflow do
       end
 
     graph
-    |> Graph.in_edges(node_vertex, by: :meta_ref)
+    |> Multigraph.in_edges(node_vertex, by: :meta_ref)
     |> Enum.map(fn edge ->
       case edge.v1 do
         %{hash: hash} ->

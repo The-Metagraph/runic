@@ -36,7 +36,7 @@ defmodule Runic.TransmutableProtocolTest do
       workflow = Runic.Transmutable.to_workflow(step)
 
       assert %Runic.Workflow{} = workflow
-      assert workflow.graph |> Graph.vertices() |> Enum.any?(&(&1 == step))
+      assert workflow.graph |> Multigraph.vertices() |> Enum.any?(&(&1 == step))
     end
 
     test "converts rule to workflow", %{rule: rule} do
@@ -57,7 +57,7 @@ defmodule Runic.TransmutableProtocolTest do
       workflow = Runic.Transmutable.to_workflow([step, rule])
 
       assert %Runic.Workflow{} = workflow
-      assert workflow.graph |> Graph.vertices() |> Enum.any?(&(&1 == step))
+      assert workflow.graph |> Multigraph.vertices() |> Enum.any?(&(&1 == step))
       refute is_nil(workflow.components[rule.name])
     end
 
@@ -110,7 +110,7 @@ defmodule Runic.TransmutableProtocolTest do
       workflow = Runic.Transmutable.to_workflow(component)
 
       assert %Runic.Workflow{} = workflow
-      assert workflow.graph |> Graph.vertices() |> Enum.any?(&(&1 == component))
+      assert workflow.graph |> Multigraph.vertices() |> Enum.any?(&(&1 == component))
     end
 
     test "user data -> component -> workflow preserves functionality", %{custom_data: custom_data} do

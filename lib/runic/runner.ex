@@ -9,6 +9,34 @@ defmodule Runic.Runner do
 
       {:ok, _pid} = Runic.Runner.start_link(name: MyApp.Runner)
 
+  ## Store Ownership
+
+  If no `:store` is configured, the Runner starts its built-in ETS store as
+  part of the supervision tree. This preserves the zero-configuration,
+  in-memory execution path.
+
+  If `:store` is configured explicitly, the Runner assumes that store's
+  supervision and lifecycle are managed elsewhere. This applies to custom
+  adapters and to built-in stores when you want to own their startup in your
+  application's supervision tree.
+
+  For adapters backed by an externally supervised dependency such as an Ecto
+  repo:
+
+      {:ok, _pid} =
+        Runic.Runner.start_link(
+          name: MyApp.Runner,
+          store: MyApp.SQLiteStore,
+          store_opts: [repo: MyApp.Repo]
+        )
+
+  To use the built-in ETS store explicitly, start it before the Runner:
+
+      children = [
+        {Runic.Runner.Store.ETS, runner_name: MyApp.Runner},
+        {Runic.Runner, name: MyApp.Runner, store: Runic.Runner.Store.ETS}
+      ]
+
   ## Running Workflows
 
       {:ok, pid} = Runic.Runner.start_workflow(MyApp.Runner, :my_workflow, workflow)
@@ -37,21 +65,26 @@ defmodule Runic.Runner do
 
     store_module = Keyword.get(opts, :store, Runic.Runner.Store.ETS)
     store_opts = Keyword.get(opts, :store_opts, []) |> Keyword.put(:runner_name, name)
+    explicit_store? = Keyword.has_key?(opts, :store)
 
     task_supervisor_opts = Keyword.get(opts, :task_supervisor, [])
 
-    children = [
-      {store_module, store_opts},
-      {Registry, keys: :unique, name: Module.concat(name, Registry)},
-      build_task_supervisor_child(name, task_supervisor_opts),
-      {DynamicSupervisor, name: Module.concat(name, WorkerSupervisor), strategy: :one_for_one}
-    ]
+    children =
+      build_store_children(store_module, store_opts, explicit_store?) ++
+        [
+          {Registry, keys: :unique, name: Module.concat(name, Registry)},
+          build_task_supervisor_child(name, task_supervisor_opts),
+          {DynamicSupervisor, name: Module.concat(name, WorkerSupervisor), strategy: :one_for_one}
+        ]
 
     :persistent_term.put({__MODULE__, name, :store_module}, store_module)
     :persistent_term.put({__MODULE__, name, :store_opts}, store_opts)
 
     Supervisor.init(children, strategy: :rest_for_one)
   end
+
+  defp build_store_children(_store_module, _store_opts, true), do: []
+  defp build_store_children(store_module, store_opts, false), do: [{store_module, store_opts}]
 
   defp build_task_supervisor_child(name, opts) when is_list(opts) do
     {Task.Supervisor, Keyword.put(opts, :name, Module.concat(name, TaskSupervisor))}

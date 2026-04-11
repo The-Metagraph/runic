@@ -449,16 +449,27 @@ end
 {:ok, _} = Runic.Runner.start_link(name: MyApp.Runner)
 ```
 
+If you configure ETS explicitly, supervise it before the Runner:
+
+```elixir
+children = [
+  {Runic.Runner.Store.ETS, runner_name: MyApp.Runner},
+  {Runic.Runner, name: MyApp.Runner, store: Runic.Runner.Store.ETS}
+]
+```
+
 #### Mnesia Adapter
 
 `Runic.Runner.Store.Mnesia` uses OTP's built-in Mnesia database for disk persistence and optional distributed storage:
 
 ```elixir
-{:ok, _} = Runic.Runner.start_link(
-  name: MyApp.Runner,
-  store: Runic.Runner.Store.Mnesia,
-  store_opts: [disc_copies: true]
-)
+children = [
+  {Runic.Runner.Store.Mnesia, runner_name: MyApp.Runner, disc_copies: true},
+  {Runic.Runner,
+   name: MyApp.Runner,
+   store: Runic.Runner.Store.Mnesia,
+   store_opts: [disc_copies: true]}
+]
 ```
 
 Mnesia tables persist across VM restarts. For distributed clusters, pass `:nodes`:
@@ -469,7 +480,7 @@ store_opts: [disc_copies: true, nodes: [:"app@node1", :"app@node2"]]
 
 #### Writing a Custom Adapter
 
-Implement the `Runic.Runner.Store` behaviour and provide `start_link/1` + `child_spec/1` for supervision:
+Implement the `Runic.Runner.Store` behaviour. The Runner only auto-starts its implicit default ETS store. If you configure any store explicitly, the Runner assumes its lifecycle is managed elsewhere. That means adapters that own runtime resources themselves should provide `start_link/1` and `child_spec/1` so you can add them to your supervision tree, while adapters backed by an externally supervised service such as an Ecto repo can remain callback-only.
 
 ```elixir
 defmodule MyApp.PostgresStore do
@@ -497,11 +508,33 @@ defmodule MyApp.PostgresStore do
       record -> {:ok, :erlang.binary_to_term(record.data)}
     end
   end
+end
+```
+
+If the adapter should be supervised in your application tree, add lifecycle callbacks:
+
+```elixir
+defmodule MyApp.PostgresStore do
+  @behaviour Runic.Runner.Store
+
+  # ...init_store/1, save/3, load/2...
 
   # start_link/1 and child_spec/1 for the Runner's supervision tree
   def start_link(opts), do: Agent.start_link(fn -> opts end, name: __MODULE__)
   def child_spec(opts), do: %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}}
 end
+```
+
+Then start the adapter before the Runner:
+
+```elixir
+children = [
+  {MyApp.PostgresStore, runner_name: MyApp.Runner, repo: MyApp.Repo},
+  {Runic.Runner,
+   name: MyApp.Runner,
+   store: MyApp.PostgresStore,
+   store_opts: [repo: MyApp.Repo]}
+]
 ```
 
 ### Telemetry

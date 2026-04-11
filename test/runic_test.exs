@@ -212,7 +212,7 @@ defmodule RunicTest do
 
       # Verify :meta_ref edge was created
       condition_hash = threshold_rule.condition_hash
-      meta_ref_edges = Graph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
       assert length(meta_ref_edges) == 1
 
       # Process values - need to match the pattern `x: x` which expects a map or keyword
@@ -729,7 +729,7 @@ defmodule RunicTest do
 
       # Verify :meta_ref edge was created for the reaction step
       reaction_hash = emit_rule.reaction_hash
-      meta_ref_edges = Graph.out_edges(workflow.graph, reaction_hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(workflow.graph, reaction_hash, by: :meta_ref)
       assert length(meta_ref_edges) == 1
 
       [edge] = meta_ref_edges
@@ -860,7 +860,7 @@ defmodule RunicTest do
 
       # Verify :meta_ref edge was created pointing to the accumulator
       condition_hash = rule.condition_hash
-      meta_ref_edges = Graph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
 
       # Edge should exist and point to an accumulator
       assert length(meta_ref_edges) >= 1
@@ -900,7 +900,7 @@ defmodule RunicTest do
 
       # Now the meta_ref edge should exist
       condition_hash = rule.condition_hash
-      meta_ref_edges = Graph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(workflow.graph, condition_hash, by: :meta_ref)
       assert length(meta_ref_edges) == 1
     end
 

@@ -103,7 +103,7 @@ defmodule Runic.Runner.PromiseBuilder do
 
   defp flow_successors(graph, node_hash) do
     graph
-    |> Graph.out_edges(node_hash, by: :flow)
+    |> Multigraph.out_edges(node_hash, by: :flow)
     |> Enum.map(fn edge ->
       case edge.v2 do
         %{hash: h} -> h
@@ -116,7 +116,7 @@ defmodule Runic.Runner.PromiseBuilder do
 
   defp flow_predecessors(graph, node_hash) do
     graph
-    |> Graph.in_edges(node_hash, by: :flow)
+    |> Multigraph.in_edges(node_hash, by: :flow)
     |> Enum.map(fn edge ->
       case edge.v1 do
         %{hash: h} -> h
@@ -141,7 +141,7 @@ defmodule Runic.Runner.PromiseBuilder do
 
   defp has_meta_refs?(graph, node_hash) do
     graph
-    |> Graph.out_edges(node_hash, by: :meta_ref)
+    |> Multigraph.out_edges(node_hash, by: :meta_ref)
     |> Enum.any?()
   end
 end

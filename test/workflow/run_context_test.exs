@@ -136,7 +136,7 @@ defmodule Runic.Workflow.RunContextTest do
 
       [meta_step | _] =
         child_workflow.graph
-        |> Graph.vertices()
+        |> Multigraph.vertices()
         |> Enum.filter(fn v -> Map.has_key?(v, :meta_refs) and v.meta_refs != [] end)
 
       merged_workflow = Workflow.merge(Workflow.new(), child_workflow)

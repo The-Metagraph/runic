@@ -18,7 +18,7 @@ defmodule Runic.Workflow.Private do
   alias Runic.Component
 
   # =============================================================================
-  # Graph wiring / component registration
+  # Multigraph wiring / component registration
   # =============================================================================
 
   def root(), do: %Root{}
@@ -79,7 +79,7 @@ defmodule Runic.Workflow.Private do
 
   def draw_connection(%Workflow{graph: g} = wrk, node_1, node_2, connection, opts \\ []) do
     opts = Keyword.put(opts, :label, connection)
-    %Workflow{wrk | graph: Graph.add_edge(g, node_1, node_2, opts)}
+    %Workflow{wrk | graph: Multigraph.add_edge(g, node_1, node_2, opts)}
   end
 
   def add_dependent_steps(workflow, {parent_step, dependent_steps}) do
@@ -125,8 +125,8 @@ defmodule Runic.Workflow.Private do
       workflow
       | graph:
           g
-          |> Graph.add_vertex(child_step, child_step.hash)
-          |> Graph.add_edge(%Root{}, child_step, label: :flow, weight: 0)
+          |> Multigraph.add_vertex(child_step, child_step.hash)
+          |> Multigraph.add_edge(%Root{}, child_step, label: :flow, weight: 0)
     }
   end
 
@@ -135,8 +135,8 @@ defmodule Runic.Workflow.Private do
       workflow
       | graph:
           g
-          |> Graph.add_vertex(child_step, child_step.hash)
-          |> Graph.add_edge(%Root{}, child_step, label: :flow, weight: 0)
+          |> Multigraph.add_vertex(child_step, child_step.hash)
+          |> Multigraph.add_edge(%Root{}, child_step, label: :flow, weight: 0)
     }
   end
 
@@ -165,8 +165,8 @@ defmodule Runic.Workflow.Private do
       workflow
       | graph:
           g
-          |> Graph.add_vertex(child_step, to_string(child_step.hash))
-          |> Graph.add_edge(parent_step, child_step, label: :flow, weight: 0)
+          |> Multigraph.add_vertex(child_step, to_string(child_step.hash))
+          |> Multigraph.add_edge(parent_step, child_step, label: :flow, weight: 0)
     }
   end
 
@@ -191,10 +191,10 @@ defmodule Runic.Workflow.Private do
 
   def mark_runnable_as_ran(%Workflow{graph: graph} = workflow, step, fact) do
     graph =
-      case Graph.update_labelled_edge(graph, fact, step, connection_for_activatable(step),
+      case Multigraph.update_labelled_edge(graph, fact, step, connection_for_activatable(step),
              label: :ran
            ) do
-        %Graph{} = graph -> graph
+        %Multigraph{} = graph -> graph
         {:error, :no_such_edge} -> graph
       end
 
@@ -205,12 +205,12 @@ defmodule Runic.Workflow.Private do
   end
 
   def satisfied_condition_hashes(%Workflow{graph: graph}, %Fact{} = fact) do
-    for %Graph.Edge{} = edge <- Graph.out_edges(graph, fact, by: :satisfied),
+    for %Multigraph.Edge{} = edge <- Multigraph.out_edges(graph, fact, by: :satisfied),
         do: edge.v2.hash
   end
 
   def matches(%Workflow{graph: graph}) do
-    for %Graph.Edge{} = edge <- Graph.edges(graph, by: [:matchable, :satisfied]) do
+    for %Multigraph.Edge{} = edge <- Multigraph.edges(graph, by: [:matchable, :satisfied]) do
       edge.v2
     end
   end
@@ -218,14 +218,14 @@ defmodule Runic.Workflow.Private do
   def log_fact(%Workflow{graph: graph} = wrk, %Fact{} = fact) do
     %Workflow{
       wrk
-      | graph: Graph.add_vertex(graph, fact)
+      | graph: Multigraph.add_vertex(graph, fact)
     }
   end
 
   def log_fact(%Workflow{graph: graph} = wrk, %FactRef{} = ref) do
     %Workflow{
       wrk
-      | graph: Graph.add_vertex(graph, ref)
+      | graph: Multigraph.add_vertex(graph, ref)
     }
   end
 
@@ -377,7 +377,7 @@ defmodule Runic.Workflow.Private do
         %Fact{ancestry: {parent_step_hash, _parent_fact}} = fact
       ) do
     wrk =
-      unless Graph.has_vertex?(wrk.graph, fact) do
+      unless Multigraph.has_vertex?(wrk.graph, fact) do
         log_fact(wrk, fact)
       else
         wrk
@@ -390,14 +390,14 @@ defmodule Runic.Workflow.Private do
       |> Workflow.next_steps(parent_step)
       |> Enum.map(& &1.hash)
 
-    for %Graph.Edge{} = edge <-
-          Enum.flat_map(next_step_hashes, &Graph.out_edges(wrk.graph, &1, by: :runnable)) do
+    for %Multigraph.Edge{} = edge <-
+          Enum.flat_map(next_step_hashes, &Multigraph.out_edges(wrk.graph, &1, by: :runnable)) do
       {Map.get(wrk.graph.vertices, edge.v2), edge.v1}
     end
   end
 
   def next_runnables(%Workflow{graph: graph}, raw_fact) do
-    for %Graph.Edge{} = edge <- Graph.out_edges(graph, root(), by: :flow) do
+    for %Multigraph.Edge{} = edge <- Multigraph.out_edges(graph, root(), by: :flow) do
       {edge.v1, Fact.new(value: raw_fact)}
     end
   end
@@ -426,7 +426,7 @@ defmodule Runic.Workflow.Private do
 
       if target_node do
         workflow.graph
-        |> Graph.out_edges(target_node, by: :ran)
+        |> Multigraph.out_edges(target_node, by: :ran)
         |> Enum.any?()
       else
         false
@@ -440,7 +440,7 @@ defmodule Runic.Workflow.Private do
 
       if target_node do
         workflow.graph
-        |> Graph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
+        |> Multigraph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
         |> length()
       else
         0
@@ -455,7 +455,7 @@ defmodule Runic.Workflow.Private do
       if target_node do
         latest_fact =
           workflow.graph
-          |> Graph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
+          |> Multigraph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
           |> Enum.max_by(
             fn edge ->
               case edge.v2 do
@@ -482,7 +482,7 @@ defmodule Runic.Workflow.Private do
 
       if target_node do
         workflow.graph
-        |> Graph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
+        |> Multigraph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
         |> Enum.max_by(
           fn edge ->
             case edge.v2 do
@@ -508,7 +508,7 @@ defmodule Runic.Workflow.Private do
 
       if target_node do
         workflow.graph
-        |> Graph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
+        |> Multigraph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
         |> Enum.map(fn edge ->
           case edge.v2 do
             %Fact{value: value} -> value
@@ -528,7 +528,7 @@ defmodule Runic.Workflow.Private do
 
       if target_node do
         workflow.graph
-        |> Graph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
+        |> Multigraph.out_edges(target_node, by: [:produced, :state_produced, :reduced])
         |> Enum.map(fn edge ->
           case edge.v2 do
             %Fact{} = fact -> fact
@@ -564,7 +564,7 @@ defmodule Runic.Workflow.Private do
     # Resolve graph-based meta_refs via :meta_ref edges
     graph_context =
       graph
-      |> Graph.out_edges(node_vertex, by: :meta_ref)
+      |> Multigraph.out_edges(node_vertex, by: :meta_ref)
       |> Enum.reduce(%{}, fn edge, acc ->
         properties = edge.properties || %{}
         getter_fn = Map.get(properties, :getter_fn)
@@ -582,7 +582,7 @@ defmodule Runic.Workflow.Private do
     # Resolve :context-kind refs from run_context
     external_context = resolve_context_refs(workflow, node)
 
-    # Graph context overrides external (more specific wins)
+    # Multigraph context overrides external (more specific wins)
     Map.merge(external_context, graph_context)
   end
 
@@ -660,7 +660,7 @@ defmodule Runic.Workflow.Private do
     case Map.get(mapped, {:latest_state_fact, acc.hash}) do
       nil ->
         graph
-        |> Graph.out_edges(acc, by: :state_produced)
+        |> Multigraph.out_edges(acc, by: :state_produced)
         |> Enum.with_index()
         |> Enum.max_by(fn {edge, idx} -> {edge.weight || 0, idx} end, fn -> nil end)
         |> case do

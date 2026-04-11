@@ -23,7 +23,7 @@ defmodule Runic.Workflow.RehydrationTest do
   end
 
   defp all_fact_hashes(workflow) do
-    for v <- Graph.vertices(workflow.graph),
+    for v <- Multigraph.vertices(workflow.graph),
         is_struct(v, Fact) or is_struct(v, FactRef),
         into: MapSet.new() do
       Facts.hash(v)
@@ -31,7 +31,7 @@ defmodule Runic.Workflow.RehydrationTest do
   end
 
   defp fact_ref_hashes(workflow) do
-    for v <- Graph.vertices(workflow.graph),
+    for v <- Multigraph.vertices(workflow.graph),
         is_struct(v, FactRef),
         into: MapSet.new() do
       v.hash
@@ -39,7 +39,7 @@ defmodule Runic.Workflow.RehydrationTest do
   end
 
   defp full_fact_hashes(workflow) do
-    for v <- Graph.vertices(workflow.graph),
+    for v <- Multigraph.vertices(workflow.graph),
         is_struct(v, Fact),
         into: MapSet.new() do
       v.hash
@@ -95,7 +95,9 @@ defmodule Runic.Workflow.RehydrationTest do
       assert MapSet.member?(hot, fact_a.hash)
 
       # Input fact is cold (it's a parent)
-      input = hd(for v <- Graph.vertices(workflow.graph), match?(%Fact{ancestry: nil}, v), do: v)
+      input =
+        hd(for v <- Multigraph.vertices(workflow.graph), match?(%Fact{ancestry: nil}, v), do: v)
+
       assert MapSet.member?(cold, input.hash)
     end
 
@@ -162,7 +164,9 @@ defmodule Runic.Workflow.RehydrationTest do
       # So let's check before executing: both steps are runnable with the input fact
       %{hot: hot} = Rehydration.classify(workflow)
 
-      input = hd(for v <- Graph.vertices(workflow.graph), match?(%Fact{ancestry: nil}, v), do: v)
+      input =
+        hd(for v <- Multigraph.vertices(workflow.graph), match?(%Fact{ancestry: nil}, v), do: v)
+
       assert MapSet.member?(hot, input.hash)
     end
 
@@ -225,8 +229,8 @@ defmodule Runic.Workflow.RehydrationTest do
       dehydrated = Rehydration.dehydrate(workflow, cold)
 
       # Edge count should be identical
-      original_edges = Graph.edges(dehydrated.graph)
-      assert length(original_edges) == length(Graph.edges(workflow.graph))
+      original_edges = Multigraph.edges(dehydrated.graph)
+      assert length(original_edges) == length(Multigraph.edges(workflow.graph))
     end
 
     test "FactRef hash and ancestry match original Fact" do
@@ -306,7 +310,7 @@ defmodule Runic.Workflow.RehydrationTest do
         |> Workflow.react_until_satisfied(5)
 
       # Persist fact values to the store before rehydrating
-      for v <- Graph.vertices(workflow.graph), match?(%Fact{}, v) do
+      for v <- Multigraph.vertices(workflow.graph), match?(%Fact{}, v) do
         store_mod.save_fact(v.hash, v.value, store_state)
       end
 
@@ -372,7 +376,7 @@ defmodule Runic.Workflow.RehydrationTest do
       {:ok, _cursor} = store_mod.append(workflow_id, all_events, store_state)
 
       # Persist fact values
-      for v <- Graph.vertices(workflow.graph), match?(%Fact{}, v) do
+      for v <- Multigraph.vertices(workflow.graph), match?(%Fact{}, v) do
         store_mod.save_fact(v.hash, v.value, store_state)
       end
 
@@ -396,7 +400,7 @@ defmodule Runic.Workflow.RehydrationTest do
       end
 
       # Verify cold FactRefs can be resolved
-      for v <- Graph.vertices(rehydrated.graph), match?(%FactRef{}, v) do
+      for v <- Multigraph.vertices(rehydrated.graph), match?(%FactRef{}, v) do
         assert {:ok, %Fact{}} = FactResolver.resolve(v, resolver)
       end
     end

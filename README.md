@@ -388,6 +388,8 @@ Workers automatically integrate with scheduler policies, dispatch runnables to s
 
 Built-in store adapters: `Runic.Runner.Store.ETS` (default, in-memory) and `Runic.Runner.Store.Mnesia` (disk-persistent, distributed). Custom adapters implement the `Runic.Runner.Store` behaviour.
 
+When no `:store` is configured, the Runner starts its built-in ETS store automatically. When `:store` is configured explicitly, the Runner assumes that store is already supervised elsewhere, including the built-in ETS and Mnesia adapters.
+
 Telemetry events are emitted under `[:runic, :runner, ...]` for workflow lifecycle, runnable dispatch/completion, and store operations. See `Runic.Runner.Telemetry` for the full event catalog.
 
 ## Guides
@@ -400,4 +402,3 @@ For quick reference and best practices:
 - [**Building a Workflow Scheduler**](guides/scheduling.md) - From simple spawned processes to production GenServer schedulers
 - [**Durable Execution**](guides/durable-execution.md) - Persistence, crash recovery, and checkpointing with the Runner
 - [**State-Based Components**](guides/state-based-components.md) - FSMs, Aggregates, Sagas, ProcessManagers and when to use each
-

@@ -161,7 +161,7 @@ defmodule Runic.Workflow.Serializer do
   Returns a map of %{component => [child_vertices]}.
   """
   def group_by_component(%Runic.Workflow{graph: graph}) do
-    component_edges = Graph.edges(graph, by: :component_of)
+    component_edges = Multigraph.edges(graph, by: :component_of)
 
     # Build parent -> children map
     Enum.reduce(component_edges, %{}, fn %{v1: parent, v2: child}, acc ->
@@ -173,14 +173,14 @@ defmodule Runic.Workflow.Serializer do
   Returns flow edges only (static dataflow, no memory).
   """
   def flow_edges(%Runic.Workflow{graph: graph}) do
-    Graph.edges(graph, by: :flow)
+    Multigraph.edges(graph, by: :flow)
   end
 
   @doc """
   Returns causal memory edges for sequence diagram generation.
   """
   def causal_edges(%Runic.Workflow{graph: graph}) do
-    Graph.edges(graph, by: [:produced, :state_produced, :reduced])
+    Multigraph.edges(graph, by: [:produced, :state_produced, :reduced])
   end
 
   @doc """
@@ -188,7 +188,7 @@ defmodule Runic.Workflow.Serializer do
   """
   def invokable_vertices(%Runic.Workflow{graph: graph}) do
     graph
-    |> Graph.vertices()
+    |> Multigraph.vertices()
     |> Enum.reject(&match?(%Runic.Workflow.Fact{}, &1))
   end
 end

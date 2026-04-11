@@ -6,6 +6,10 @@ defmodule Runic.Runner.Store.ETS do
   The GenServer owns the ETS tables, while Store callbacks operate
   on the :public tables directly for zero-overhead reads and writes.
 
+  When the Runner is started without an explicit `:store`, it will start this
+  ETS store automatically. If you configure `store: Runic.Runner.Store.ETS`
+  explicitly, start this module in your supervision tree before the Runner.
+
   ## Stream Semantics
 
   Supports event-sourced `append/3` and `stream/2` via a second

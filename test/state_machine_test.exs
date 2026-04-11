@@ -325,7 +325,7 @@ defmodule Runic.StateMachineTest do
         )
 
       wrk = Workflow.new() |> Workflow.add(sm)
-      vertices = Graph.vertices(wrk.graph)
+      vertices = Multigraph.vertices(wrk.graph)
 
       # Should contain only standard types: Root, Accumulator, Condition, Step, StateMachine, Facts
       vertex_types = Enum.map(vertices, & &1.__struct__) |> Enum.uniq()
