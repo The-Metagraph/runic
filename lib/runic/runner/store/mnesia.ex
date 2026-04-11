@@ -8,11 +8,13 @@ defmodule Runic.Runner.Store.Mnesia do
 
   ## Usage
 
-      {:ok, _} = Runic.Runner.start_link(
-        name: MyApp.Runner,
-        store: Runic.Runner.Store.Mnesia,
-        store_opts: [disc_copies: true]
-      )
+      children = [
+        {Runic.Runner.Store.Mnesia, runner_name: MyApp.Runner, disc_copies: true},
+        {Runic.Runner,
+         name: MyApp.Runner,
+         store: Runic.Runner.Store.Mnesia,
+         store_opts: [disc_copies: true]}
+      ]
 
   ## Options
 

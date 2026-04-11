@@ -1440,6 +1440,7 @@ defmodule Runic.Workflow.EventSourcedTest do
     test "Worker persists fact values to store during execution" do
       runner_name = :"test_fact_persist_#{System.unique_integer([:positive])}"
 
+      start_supervised!({Runic.Runner.Store.ETS, runner_name: runner_name})
       start_supervised!({Runic.Runner, name: runner_name, store: Runic.Runner.Store.ETS})
 
       {:ok, store_state} = Runic.Runner.Store.ETS.init_store(runner_name: runner_name)

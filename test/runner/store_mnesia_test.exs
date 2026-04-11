@@ -203,6 +203,8 @@ defmodule Runic.Runner.Store.MnesiaTest do
     test "Runner with Mnesia store runs a workflow end-to-end" do
       runner_name = :"test_mnesia_runner_#{System.unique_integer([:positive])}"
 
+      start_supervised!({MnesiaStore, runner_name: runner_name, disc_copies: false})
+
       start_supervised!(
         {Runic.Runner, name: runner_name, store: MnesiaStore, store_opts: [disc_copies: false]}
       )
@@ -220,6 +222,8 @@ defmodule Runic.Runner.Store.MnesiaTest do
 
     test "Runner with Mnesia store persists and resumes" do
       runner_name = :"test_mnesia_resume_#{System.unique_integer([:positive])}"
+
+      start_supervised!({MnesiaStore, runner_name: runner_name, disc_copies: false})
 
       start_supervised!(
         {Runic.Runner, name: runner_name, store: MnesiaStore, store_opts: [disc_copies: false]}
@@ -243,6 +247,8 @@ defmodule Runic.Runner.Store.MnesiaTest do
 
     test "Runner with Mnesia store supports multi-step pipeline" do
       runner_name = :"test_mnesia_pipeline_#{System.unique_integer([:positive])}"
+
+      start_supervised!({MnesiaStore, runner_name: runner_name, disc_copies: false})
 
       start_supervised!(
         {Runic.Runner, name: runner_name, store: MnesiaStore, store_opts: [disc_copies: false]}

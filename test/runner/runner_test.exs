@@ -1,6 +1,8 @@
 defmodule Runic.Runner.RunnerTest do
   use ExUnit.Case, async: true
 
+  require Runic
+
   describe "supervision tree" do
     test "starts with a name" do
       runner_name = :"test_runner_#{System.unique_integer([:positive])}"
@@ -106,11 +108,84 @@ defmodule Runic.Runner.RunnerTest do
     test "accepts custom store options" do
       runner_name = :"test_runner_#{System.unique_integer([:positive])}"
 
+      start_supervised!({Runic.Runner.Store.ETS, runner_name: runner_name})
+
       start_supervised!(
         {Runic.Runner, name: runner_name, store: Runic.Runner.Store.ETS, store_opts: []}
       )
 
       assert Process.whereis(Module.concat(runner_name, Store)) |> Process.alive?()
+    end
+
+    test "explicit stores are externally supervised" do
+      runner_name = :"test_runner_#{System.unique_integer([:positive])}"
+
+      start_supervised!(
+        {Runic.Runner,
+         name: runner_name,
+         store: Runic.TestSupport.StatelessStore,
+         store_opts: [repo: :external_repo]}
+      )
+
+      refute Process.whereis(Module.concat(runner_name, Store))
+      assert Process.whereis(Module.concat(runner_name, Registry)) |> Process.alive?()
+
+      {store_mod, store_state} = Runic.Runner.get_store(runner_name)
+      assert store_mod == Runic.TestSupport.StatelessStore
+      assert store_state.runner_name == runner_name
+      assert store_state.repo == :external_repo
+
+      workflow =
+        Runic.workflow(
+          name: :identity,
+          steps: [Runic.step(fn input -> input end, name: :echo)]
+        )
+
+      {:ok, _pid} = Runic.Runner.start_workflow(runner_name, :workflow_1, workflow)
+      :ok = Runic.Runner.run(runner_name, :workflow_1, :hello)
+      assert_workflow_idle(runner_name, :workflow_1)
+
+      assert {:ok, %{echo: :hello}} =
+               Runic.Runner.get_results(runner_name, :workflow_1, components: [:echo])
+    end
+
+    test "explicit ETS store must be started separately" do
+      runner_name = :"test_runner_#{System.unique_integer([:positive])}"
+
+      start_supervised!({Runic.Runner.Store.ETS, runner_name: runner_name})
+      start_supervised!({Runic.Runner, name: runner_name, store: Runic.Runner.Store.ETS})
+
+      assert Process.whereis(Module.concat(runner_name, Store)) |> Process.alive?()
+
+      {store_mod, store_state} = Runic.Runner.get_store(runner_name)
+      assert store_mod == Runic.Runner.Store.ETS
+      assert store_state.runner_name == runner_name
+    end
+  end
+
+  defp assert_workflow_idle(runner, workflow_id, timeout \\ 2_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    wait_until_idle(runner, workflow_id, deadline)
+  end
+
+  defp wait_until_idle(runner, workflow_id, deadline) do
+    if System.monotonic_time(:millisecond) > deadline do
+      flunk("Workflow #{inspect(workflow_id)} did not reach idle within timeout")
+    end
+
+    case Runic.Runner.lookup(runner, workflow_id) do
+      nil ->
+        flunk("Workflow #{inspect(workflow_id)} not found")
+
+      pid ->
+        state = :sys.get_state(pid)
+
+        if state.status == :idle and map_size(state.active_tasks) == 0 do
+          :ok
+        else
+          Process.sleep(10)
+          wait_until_idle(runner, workflow_id, deadline)
+        end
     end
   end
 end
