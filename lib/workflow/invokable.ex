@@ -951,7 +951,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.Join do
 
     joined_edges =
       workflow.graph
-      |> Graph.in_edges(join)
+      |> Multigraph.in_edges(join)
       |> Enum.filter(&(&1.label == :joined))
 
     possible_priors_by_parent =
@@ -981,7 +981,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.Join do
         |> Workflow.prepare_next_runnables(join, join_bindings_fact)
 
       workflow.graph
-      |> Graph.in_edges(join)
+      |> Multigraph.in_edges(join)
       |> Enum.filter(&(&1.label in [:runnable, :joined]))
       |> Enum.reduce(workflow, fn
         %{v1: v1, label: :runnable}, wrk ->
@@ -991,7 +991,8 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.Join do
           %Workflow{
             wrk
             | graph:
-                wrk.graph |> Graph.update_labelled_edge(v1, v2, :joined, label: :join_satisfied)
+                wrk.graph
+                |> Multigraph.update_labelled_edge(v1, v2, :joined, label: :join_satisfied)
           }
       end)
       |> Workflow.draw_connection(join, join_bindings_fact, :produced, weight: causal_depth)
@@ -1010,7 +1011,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.Join do
     # Get current join state from graph
     joined_edges =
       workflow.graph
-      |> Graph.in_edges(join)
+      |> Multigraph.in_edges(join)
       |> Enum.filter(&(&1.label == :joined))
 
     # Collect satisfied facts by parent
@@ -1191,7 +1192,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.FanOut do
   end
 
   def is_reduced?(workflow, fan_out) do
-    Graph.out_edges(workflow.graph, fan_out) |> Enum.any?(&(&1.label == :fan_in))
+    Multigraph.out_edges(workflow.graph, fan_out) |> Enum.any?(&(&1.label == :fan_in))
   end
 end
 
@@ -1218,7 +1219,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.FanIn do
       ) do
     fan_out =
       workflow.graph
-      |> Graph.in_edges(fan_in)
+      |> Multigraph.in_edges(fan_in)
       |> Enum.filter(&(&1.label == :fan_in))
       |> List.first(%{})
       |> Map.get(:v1)
@@ -1363,7 +1364,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.FanIn do
   # that traces back to this source_fact_hash
   defp has_reduced_output?(workflow, fan_in, source_fact_hash) do
     workflow.graph
-    |> Graph.out_edges(fan_in)
+    |> Multigraph.out_edges(fan_in)
     |> Enum.any?(fn edge ->
       edge.label == :reduced and
         traces_to_source_fact?(workflow, edge.v2, source_fact_hash)
@@ -1617,7 +1618,7 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.FanIn do
 
   defp find_upstream_fan_out(workflow, fan_in) do
     workflow.graph
-    |> Graph.in_edges(fan_in)
+    |> Multigraph.in_edges(fan_in)
     |> Enum.filter(&(&1.label == :fan_in))
     |> List.first(%{})
     |> Map.get(:v1)

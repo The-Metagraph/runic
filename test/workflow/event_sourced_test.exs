@@ -177,7 +177,7 @@ defmodule Runic.Workflow.EventSourcedTest do
       }
 
       wf = Workflow.apply_event(workflow, event)
-      satisfied_edges = Graph.edges(wf.graph, by: :satisfied)
+      satisfied_edges = Multigraph.edges(wf.graph, by: :satisfied)
       assert length(satisfied_edges) == 1
     end
   end
@@ -417,7 +417,7 @@ defmodule Runic.Workflow.EventSourcedTest do
       facts = Workflow.facts(wf)
       assert Enum.any?(facts, &(&1.hash == 99999 && &1.value == 0))
 
-      state_init_edges = Graph.edges(wf.graph, by: :state_initiated)
+      state_init_edges = Multigraph.edges(wf.graph, by: :state_initiated)
       assert length(state_init_edges) == 1
     end
   end
@@ -552,7 +552,7 @@ defmodule Runic.Workflow.EventSourcedTest do
       }
 
       wf = Workflow.apply_event(workflow, event)
-      joined_edges = Graph.edges(wf.graph, by: :joined)
+      joined_edges = Multigraph.edges(wf.graph, by: :joined)
       assert length(joined_edges) == 1
       assert hd(joined_edges).v1 == fact
       assert hd(joined_edges).v2 == join
@@ -618,10 +618,10 @@ defmodule Runic.Workflow.EventSourcedTest do
       }
 
       wf = Workflow.apply_event(workflow, event)
-      joined_edges = Graph.edges(wf.graph, by: :joined)
+      joined_edges = Multigraph.edges(wf.graph, by: :joined)
       assert Enum.empty?(joined_edges)
 
-      satisfied_edges = Graph.edges(wf.graph, by: :join_satisfied)
+      satisfied_edges = Multigraph.edges(wf.graph, by: :join_satisfied)
       assert length(satisfied_edges) == 1
     end
   end

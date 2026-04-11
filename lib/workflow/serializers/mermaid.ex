@@ -108,7 +108,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
   end
 
   defp build_component_info(%Workflow{graph: graph}, component_groups) do
-    component_edges = Graph.edges(graph, by: :component_of)
+    component_edges = Multigraph.edges(graph, by: :component_of)
 
     child_to_parent =
       Enum.reduce(component_edges, %{}, fn %{v1: parent, v2: child, properties: props}, acc ->
@@ -137,7 +137,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
         case fact do
           %Workflow.Fact{ancestry: {_producer_hash, _}} ->
             graph
-            |> Graph.out_edges(fact)
+            |> Multigraph.out_edges(fact)
             |> Enum.map(& &1.v2)
             |> Enum.reject(&match?(%Workflow.Fact{}, &1))
 
@@ -216,7 +216,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
   end
 
   defp find_input_facts(%Workflow{graph: graph}, causal_edges) do
-    all_vertices = Graph.vertices(graph)
+    all_vertices = Multigraph.vertices(graph)
 
     causal_edges
     |> Enum.flat_map(fn %{v2: fact} ->
@@ -323,7 +323,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
 
     consumers =
       graph
-      |> Graph.out_edges(fact)
+      |> Multigraph.out_edges(fact)
       |> Enum.map(& &1.v2)
       |> Enum.reject(&match?(%Workflow.Fact{}, &1))
       |> Enum.map(fn consumer ->
@@ -412,7 +412,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
 
     standalone =
       graph
-      |> Graph.vertices()
+      |> Multigraph.vertices()
       |> Enum.reject(&match?(%Workflow.Fact{}, &1))
       |> Enum.reject(fn v -> MapSet.member?(grouped_hashes, Serializer.node_id(v)) end)
       |> Enum.reject(fn v -> Map.has_key?(component_groups, v) end)
@@ -468,7 +468,7 @@ defmodule Runic.Workflow.Serializers.Mermaid do
   defp add_class_assignments(lines, %Workflow{graph: graph}) do
     class_groups =
       graph
-      |> Graph.vertices()
+      |> Multigraph.vertices()
       |> Enum.reject(&match?(%Workflow.Fact{}, &1))
       |> Enum.group_by(&Serializer.node_class/1)
 

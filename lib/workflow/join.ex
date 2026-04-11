@@ -26,7 +26,7 @@ defimpl Runic.Workflow.Coordinator, for: Runic.Workflow.Join do
 
     joined_edges =
       wf.graph
-      |> Graph.in_edges(join)
+      |> Multigraph.in_edges(join)
       |> Enum.filter(&(&1.label == :joined))
 
     satisfied_by_parent =

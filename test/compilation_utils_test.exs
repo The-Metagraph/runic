@@ -52,7 +52,7 @@ defmodule CompilationUtilsTest do
         :test_workflow_with_join
       )
 
-    assert Enum.any?(Graph.vertices(wrk.graph), fn
+    assert Enum.any?(Multigraph.vertices(wrk.graph), fn
              %Runic.Workflow.Join{} -> true
              _ -> false
            end)
@@ -126,15 +126,15 @@ defmodule CompilationUtilsTest do
     refute is_nil(inner_fan_out)
 
     assert [%{v1: %Runic.Workflow.Map{}}] =
-             Graph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
+             Multigraph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
 
-    assert Enum.count(Graph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) == 2
+    assert Enum.count(Multigraph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) == 2
 
-    # assert Graph.out_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() ==
+    # assert Multigraph.out_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() ==
     #          4
     assert Workflow.next_steps(wrk, first_fan_out) |> Enum.count() == 4
 
-    assert Graph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
+    assert Multigraph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
   end
 
   test "map pipelines with nested map expressions dependent on multiple sources can be compiled with depth first traversal" do
@@ -178,14 +178,14 @@ defmodule CompilationUtilsTest do
     refute is_nil(inner_fan_out)
 
     assert [%{v1: %Runic.Workflow.Map{}}] =
-             Graph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
+             Multigraph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
 
-    assert Enum.count(Graph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) == 2
+    assert Enum.count(Multigraph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) == 2
 
-    # assert Graph.out_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() ==
+    # assert Multigraph.out_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() ==
     #          4
     assert Workflow.next_steps(wrk, first_fan_out) |> Enum.count() == 4
 
-    assert Graph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
+    assert Multigraph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
   end
 end

@@ -2,7 +2,7 @@ defmodule Runic.MixProject do
   use Mix.Project
 
   @repo_url "https://github.com/zblanco/runic"
-  @version "0.1.0-alpha.6"
+  @version "0.1.0-alpha.7"
 
   def project do
     [
@@ -142,7 +142,7 @@ defmodule Runic.MixProject do
     [
       {:uniq, "~> 0.6.1"},
       {:telemetry, "~> 1.0"},
-      {:multigraph, "~> 0.16.1-mg.2"},
+      {:multigraph, "~> 0.16.1-mg.3"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false, warn_if_outdated: true},
       {:tidewave, "~> 0.4", only: :dev},
       {:bandit, "~> 1.0", only: :dev},

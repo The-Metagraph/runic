@@ -6712,7 +6712,7 @@ defmodule Runic do
 
         reaction = unquote(reaction_step)
         wrk = Workflow.new()
-        wrk = %Workflow{wrk | graph: Graph.add_vertex(wrk.graph, reaction, reaction.hash)}
+        wrk = %Workflow{wrk | graph: Multigraph.add_vertex(wrk.graph, reaction, reaction.hash)}
 
         unquote(build_or_branch_wiring(compiled_branches))
       end
@@ -6860,7 +6860,7 @@ defmodule Runic do
                 )
 
               branch_inline_conds =
-                Enum.filter(Graph.vertices(wrk.graph), fn
+                Enum.filter(Multigraph.vertices(wrk.graph), fn
                   %Condition{hash: h} -> h in unquote(inline_hashes)
                   _ -> false
                 end)
@@ -6912,7 +6912,7 @@ defmodule Runic do
         import Runic
         wrk = Workflow.new()
         reaction = unquote(reaction_step)
-        %Workflow{wrk | graph: Graph.add_vertex(wrk.graph, reaction, reaction.hash)}
+        %Workflow{wrk | graph: Multigraph.add_vertex(wrk.graph, reaction, reaction.hash)}
       end
 
     condition_hash = Components.fact_hash({:or, [{:ref, name}]})

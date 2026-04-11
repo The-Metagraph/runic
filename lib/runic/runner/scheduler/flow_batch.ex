@@ -125,7 +125,7 @@ defmodule Runic.Runner.Scheduler.FlowBatch do
 
   defp has_meta_refs?(graph, node_hash) do
     graph
-    |> Graph.out_edges(node_hash, by: :meta_ref)
+    |> Multigraph.out_edges(node_hash, by: :meta_ref)
     |> Enum.any?()
   end
 
@@ -139,14 +139,14 @@ defmodule Runic.Runner.Scheduler.FlowBatch do
       # Check :flow successors that are also in the eligible set
       successors =
         graph
-        |> Graph.out_edges(hash, by: :flow)
+        |> Multigraph.out_edges(hash, by: :flow)
         |> Enum.map(&extract_hash/1)
         |> Enum.filter(&MapSet.member?(eligible_hashes, &1))
 
       # Check :flow predecessors that are also in the eligible set
       predecessors =
         graph
-        |> Graph.in_edges(hash, by: :flow)
+        |> Multigraph.in_edges(hash, by: :flow)
         |> Enum.map(&extract_hash_v1/1)
         |> Enum.filter(&MapSet.member?(eligible_hashes, &1))
 

@@ -157,11 +157,11 @@ defmodule Runic.Component.FlowPath do
   """
   def flow_path(graph, from, to) do
     graph
-    |> Graph.edges(by: :flow)
-    |> Enum.reduce(Graph.new(type: :directed), fn edge, g ->
-      Graph.add_edge(g, edge.v1, edge.v2)
+    |> Multigraph.edges(by: :flow)
+    |> Enum.reduce(Multigraph.new(type: :directed), fn edge, g ->
+      Multigraph.add_edge(g, edge.v1, edge.v2)
     end)
-    |> Graph.get_shortest_path(from, to) || []
+    |> Multigraph.get_shortest_path(from, to) || []
   end
 end
 
@@ -290,7 +290,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
       ) do
     fan_out_step =
       pipeline_workflow.graph
-      |> Graph.out_neighbors(Workflow.root())
+      |> Multigraph.out_neighbors(Workflow.root())
       |> List.first()
 
     wrk =
@@ -301,7 +301,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
 
     wrk =
       pipeline_workflow.graph
-      |> Graph.edges()
+      |> Multigraph.edges()
       |> Enum.reduce(wrk, fn
         %{v1: %Root{}, v2: _fan_out}, wrk ->
           wrk
@@ -324,12 +324,12 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
         #   Workflow.add(wrk, nested_map, to: fan_out.hash)
 
         %{v1: _v1, v2: %Runic.Workflow.Map{} = nested_map} = edge, wrk ->
-          wrk = Map.put(wrk, :graph, Graph.add_edge(wrk.graph, edge))
+          wrk = Map.put(wrk, :graph, Multigraph.add_edge(wrk.graph, edge))
 
           # Get the nested map's fan_out step
           nested_fan_out_step =
             nested_map.pipeline.graph
-            |> Graph.out_neighbors(Workflow.root())
+            |> Multigraph.out_neighbors(Workflow.root())
             |> List.first()
 
           wrk
@@ -340,7 +340,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
 
         %{v1: _, v2: _} = edge, wrk ->
           # for non-components such as joins, just add the edge
-          %Workflow{wrk | graph: Graph.add_edge(wrk.graph, edge)}
+          %Workflow{wrk | graph: Multigraph.add_edge(wrk.graph, edge)}
       end)
 
     %Workflow{
@@ -355,7 +355,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
     }
   end
 
-  defp is_leaf?(g, v), do: g |> Graph.out_edges(v, by: :flow) |> Enum.count() == 0
+  defp is_leaf?(g, v), do: g |> Multigraph.out_edges(v, by: :flow) |> Enum.count() == 0
 
   def get_component(%Runic.Workflow.Map{components: components}, sub_component_name) do
     Map.get(components, sub_component_name)
@@ -366,7 +366,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
         %Workflow{} = workflow,
         kind
       ) do
-    case Graph.out_edges(workflow.graph, Map.get(workflow.graph.vertices, map.hash),
+    case Multigraph.out_edges(workflow.graph, Map.get(workflow.graph.vertices, map.hash),
            by: :component_of,
            where: fn edge ->
              edge.properties[:kind] == kind
@@ -443,9 +443,9 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
   #   # for vertices in the map workflow, remove them but only if they're not also involved in separate components
 
   #   map_wrk.graph
-  #   |> Graph.vertices()
+  #   |> Multigraph.vertices()
   #   |> Enum.reduce(workflow, fn vertex, wrk ->
-  #     case Graph.out_edges(wrk.graph, vertex) do
+  #     case Multigraph.out_edges(wrk.graph, vertex) do
 
   #     end
   #   end)
@@ -831,14 +831,15 @@ defimpl Runic.Component, for: Runic.Workflow.Rule do
             wrk
             | graph:
                 wrk.graph
-                |> Graph.replace_vertex(conj, updated_conj)
-                |> Graph.add_edge(referenced_condition, updated_conj, label: :flow)
+                |> Multigraph.replace_vertex(conj, updated_conj)
+                |> Multigraph.add_edge(referenced_condition, updated_conj, label: :flow)
           }
 
         %Step{} ->
           %Workflow{
             wrk
-            | graph: Graph.add_edge(wrk.graph, referenced_condition, target_node, label: :flow)
+            | graph:
+                Multigraph.add_edge(wrk.graph, referenced_condition, target_node, label: :flow)
           }
 
         _ ->
@@ -1743,18 +1744,18 @@ defimpl Runic.Component, for: Runic.Workflow do
   def connect(%Workflow{} = child_workflow, parent_component, workflow) do
     new_graph =
       child_workflow.graph
-      |> Graph.edges()
+      |> Multigraph.edges()
       |> Enum.reduce(workflow.graph, fn
         %{v1: %Runic.Workflow.Root{}, v2: _} = edge, g ->
-          new_edge = %Graph.Edge{edge | v1: parent_component}
-          Graph.add_edge(g, new_edge)
+          new_edge = %Multigraph.Edge{edge | v1: parent_component}
+          Multigraph.add_edge(g, new_edge)
 
         # handle reaction memory edges to override with latest history
         %{v1: %Fact{} = fact_v1, v2: v2, label: label} = edge, g
         when label in [:matchable, :runnable, :ran] ->
           out_edge_labels_of_into_mem_for_edge =
             g
-            |> Graph.out_edges(fact_v1)
+            |> Multigraph.out_edges(fact_v1)
             |> Enum.filter(&(&1.v2 == v2))
             |> MapSet.new(& &1.label)
 
@@ -1765,14 +1766,14 @@ defimpl Runic.Component, for: Runic.Workflow do
 
             label == :ran and
                 MapSet.member?(out_edge_labels_of_into_mem_for_edge, :runnable) ->
-              Graph.update_labelled_edge(g, fact_v1, v2, :runnable, label: :ran)
+              Multigraph.update_labelled_edge(g, fact_v1, v2, :runnable, label: :ran)
 
             true ->
-              Graph.add_edge(g, edge)
+              Multigraph.add_edge(g, edge)
           end
 
         edge, g ->
-          Graph.add_edge(g, edge)
+          Multigraph.add_edge(g, edge)
       end)
 
     # Merge mapped data: mapped_paths as MapSet union, other keys (tracking data) merged

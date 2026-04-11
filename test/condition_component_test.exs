@@ -167,7 +167,7 @@ defmodule ConditionComponentTest do
         Workflow.new("test")
         |> Workflow.add(cond)
 
-      assert cond in Graph.vertices(workflow.graph)
+      assert cond in Multigraph.vertices(workflow.graph)
       assert Map.has_key?(workflow.components, :big_check)
     end
 
@@ -180,7 +180,7 @@ defmodule ConditionComponentTest do
         |> Workflow.add(step)
         |> Workflow.add(cond, to: :add_one)
 
-      assert cond in Graph.vertices(workflow.graph)
+      assert cond in Multigraph.vertices(workflow.graph)
       assert Map.has_key?(workflow.components, :big_check)
     end
 
@@ -334,7 +334,7 @@ defmodule ConditionComponentTest do
           then(fn %{value: v} -> {:result, v} end)
         end
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
 
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
@@ -352,7 +352,7 @@ defmodule ConditionComponentTest do
           then(fn %{value: v} -> {:result, v} end)
         end
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
 
       inline_conditions = Enum.filter(vertices, &match?(%Condition{}, &1))
       assert length(inline_conditions) >= 1
@@ -371,7 +371,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
 
@@ -390,7 +390,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
 
@@ -411,7 +411,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{name: :keyword_ref_rule} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
       assert :ham in hd(conjunctions).condition_refs
@@ -425,7 +425,7 @@ defmodule ConditionComponentTest do
           then(fn %{value: v} -> {:result, v} end)
         end
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       conj = hd(conjunctions)
 
@@ -499,7 +499,7 @@ defmodule ConditionComponentTest do
           then(fn %{value: v} -> {:result, v} end)
         end
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
 
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert Enum.empty?(conjunctions)
@@ -537,7 +537,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert Enum.empty?(conjunctions)
     end
@@ -552,7 +552,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
 
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
@@ -572,7 +572,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 2
     end
@@ -612,7 +612,7 @@ defmodule ConditionComponentTest do
 
       assert %Rule{} = rule
 
-      vertices = Graph.vertices(rule.workflow.graph)
+      vertices = Multigraph.vertices(rule.workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
       assert :ham in hd(conjunctions).condition_refs
@@ -660,7 +660,7 @@ defmodule ConditionComponentTest do
         |> Workflow.add(ham)
         |> Workflow.add(rule)
 
-      vertices = Graph.vertices(workflow.graph)
+      vertices = Multigraph.vertices(workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 1
 
@@ -684,10 +684,10 @@ defmodule ConditionComponentTest do
         |> Workflow.add(ham)
         |> Workflow.add(rule)
 
-      vertices = Graph.vertices(workflow.graph)
+      vertices = Multigraph.vertices(workflow.graph)
       conj = Enum.find(vertices, &match?(%Conjunction{}, &1))
 
-      flow_edges = Graph.in_edges(workflow.graph, conj, by: :flow)
+      flow_edges = Multigraph.in_edges(workflow.graph, conj, by: :flow)
       flow_sources = Enum.map(flow_edges, & &1.v1)
       assert ham in flow_sources
     end
@@ -723,7 +723,7 @@ defmodule ConditionComponentTest do
         |> Workflow.add(eggs)
         |> Workflow.add(rule)
 
-      vertices = Graph.vertices(workflow.graph)
+      vertices = Multigraph.vertices(workflow.graph)
       conj = Enum.find(vertices, &match?(%Conjunction{}, &1))
 
       assert MapSet.member?(conj.condition_hashes, ham.hash)
@@ -747,7 +747,7 @@ defmodule ConditionComponentTest do
         |> Workflow.add(rule)
 
       reaction = Map.get(workflow.graph.vertices, rule.reaction_hash)
-      flow_edges = Graph.in_edges(workflow.graph, reaction, by: :flow)
+      flow_edges = Multigraph.in_edges(workflow.graph, reaction, by: :flow)
       flow_sources = Enum.map(flow_edges, & &1.v1)
 
       assert ham in flow_sources
@@ -776,7 +776,7 @@ defmodule ConditionComponentTest do
         |> Workflow.add(rule1)
         |> Workflow.add(rule2)
 
-      vertices = Graph.vertices(workflow.graph)
+      vertices = Multigraph.vertices(workflow.graph)
       conjunctions = Enum.filter(vertices, &match?(%Conjunction{}, &1))
       assert length(conjunctions) == 2
 

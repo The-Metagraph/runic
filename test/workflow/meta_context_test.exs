@@ -267,7 +267,7 @@ defmodule Runic.Workflow.MetaContextTest do
           %{kind: :state_of, field_path: [:total], context_key: :counter_total}
         )
 
-      edges = Graph.out_edges(workflow.graph, condition.hash, by: :meta_ref)
+      edges = Multigraph.out_edges(workflow.graph, condition.hash, by: :meta_ref)
       assert length(edges) == 1
 
       [edge] = edges
@@ -777,7 +777,7 @@ defmodule Runic.Workflow.MetaContextTest do
       assert condition != nil
 
       # Verify the :meta_ref edge exists with a rebuilt getter_fn
-      meta_ref_edges = Graph.out_edges(restored.graph, condition.hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(restored.graph, condition.hash, by: :meta_ref)
       assert length(meta_ref_edges) == 1
 
       edge = hd(meta_ref_edges)
@@ -895,7 +895,7 @@ defmodule Runic.Workflow.MetaContextTest do
       condition =
         Map.get(rule_component.workflow.graph.vertices, rule_component.condition_hash)
 
-      meta_ref_edges = Graph.out_edges(restored.graph, condition.hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(restored.graph, condition.hash, by: :meta_ref)
 
       # Should have 2 meta_ref edges (one for state_of, one for fact_count)
       assert length(meta_ref_edges) == 2
@@ -964,7 +964,7 @@ defmodule Runic.Workflow.MetaContextTest do
       condition =
         Map.get(rule_component.workflow.graph.vertices, rule_component.condition_hash)
 
-      meta_ref_edges = Graph.out_edges(restored.graph, condition.hash, by: :meta_ref)
+      meta_ref_edges = Multigraph.out_edges(restored.graph, condition.hash, by: :meta_ref)
 
       assert length(meta_ref_edges) == 1
       edge = hd(meta_ref_edges)

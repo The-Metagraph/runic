@@ -231,7 +231,8 @@ defmodule Runic.Workflow.Rehydration do
   # that appear as a parent_fact_hash in some other fact's ancestry tuple.
   # O(|V|) time and space.
   defp scan_facts(graph) do
-    Enum.reduce(Graph.vertices(graph), {MapSet.new(), MapSet.new()}, fn vertex, {all, parents} ->
+    Enum.reduce(Multigraph.vertices(graph), {MapSet.new(), MapSet.new()}, fn vertex,
+                                                                             {all, parents} ->
       case vertex do
         %Fact{hash: h, ancestry: {_producer, parent_hash}} ->
           {MapSet.put(all, h), MapSet.put(parents, parent_hash)}
@@ -258,7 +259,7 @@ defmodule Runic.Workflow.Rehydration do
   # Facts on :runnable or :matchable activation edges.
   # Leverages the multigraph edge adjacency index for O(|activation edges|).
   defp pending_runnable_input_hashes(graph) do
-    for %Graph.Edge{v1: fact} <- Graph.edges(graph, by: [:runnable, :matchable]),
+    for %Multigraph.Edge{v1: fact} <- Multigraph.edges(graph, by: [:runnable, :matchable]),
         is_struct(fact, Fact) or is_struct(fact, FactRef),
         into: MapSet.new() do
       Facts.hash(fact)
@@ -273,7 +274,7 @@ defmodule Runic.Workflow.Rehydration do
   # produced by the target node. Kind-aware: count/boolean meta-refs don't need
   # values, so their target facts are excluded.
   defp meta_ref_target_hashes(%Workflow{graph: graph}) do
-    for %Graph.Edge{v2: target, properties: props} <- Graph.edges(graph, by: :meta_ref),
+    for %Multigraph.Edge{v2: target, properties: props} <- Multigraph.edges(graph, by: :meta_ref),
         kind = Map.get(props || %{}, :kind),
         kind not in [:fact_count, :step_ran?],
         reduce: MapSet.new() do
@@ -296,7 +297,8 @@ defmodule Runic.Workflow.Rehydration do
   @production_labels [:produced, :state_produced, :reduced, :state_initiated]
 
   defp collect_produced_fact_hashes(graph, node_hash, acc) do
-    for %Graph.Edge{v2: fact} <- Graph.out_edges(graph, node_hash, by: @production_labels),
+    for %Multigraph.Edge{v2: fact} <-
+          Multigraph.out_edges(graph, node_hash, by: @production_labels),
         is_struct(fact, Fact) or is_struct(fact, FactRef),
         into: acc do
       Facts.hash(fact)
@@ -310,7 +312,7 @@ defmodule Runic.Workflow.Rehydration do
   # Facts on :joined edges (fact → join_node) that haven't been relabeled yet.
   # Leverages the multigraph edge adjacency index.
   defp pending_join_input_hashes(graph) do
-    for %Graph.Edge{v1: fact} <- Graph.edges(graph, by: :joined),
+    for %Multigraph.Edge{v1: fact} <- Multigraph.edges(graph, by: :joined),
         is_struct(fact, Fact) or is_struct(fact, FactRef),
         into: MapSet.new() do
       Facts.hash(fact)

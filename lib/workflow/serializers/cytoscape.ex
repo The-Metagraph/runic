@@ -66,7 +66,7 @@ defmodule Runic.Workflow.Serializers.Cytoscape do
     # Get all vertices
     vertices =
       graph
-      |> Graph.vertices()
+      |> Multigraph.vertices()
       |> maybe_filter_facts(opts)
       |> Enum.map(fn vertex ->
         build_vertex(vertex, parent_map)

@@ -388,7 +388,7 @@ defmodule Runic.Runner.Scheduler.Adaptive do
 
   defp has_meta_refs?(graph, node_hash) do
     graph
-    |> Graph.out_edges(node_hash, by: :meta_ref)
+    |> Multigraph.out_edges(node_hash, by: :meta_ref)
     |> Enum.any?()
   end
 
@@ -398,13 +398,13 @@ defmodule Runic.Runner.Scheduler.Adaptive do
 
       successors =
         graph
-        |> Graph.out_edges(hash, by: :flow)
+        |> Multigraph.out_edges(hash, by: :flow)
         |> Enum.map(&extract_hash_v2/1)
         |> Enum.filter(&MapSet.member?(eligible_hashes, &1))
 
       predecessors =
         graph
-        |> Graph.in_edges(hash, by: :flow)
+        |> Multigraph.in_edges(hash, by: :flow)
         |> Enum.map(&extract_hash_v1/1)
         |> Enum.filter(&MapSet.member?(eligible_hashes, &1))
 

@@ -27,7 +27,7 @@ defmodule Runic.Workflow.ThreePhaseInvokableTest do
       # After react, there should be facts at depth 1 (from step1)
       step1_facts =
         workflow.graph
-        |> Graph.out_edges(step1)
+        |> Multigraph.out_edges(step1)
         |> Enum.filter(&(&1.label == :produced))
         |> Enum.map(& &1.v2)
 
@@ -97,7 +97,7 @@ defmodule Runic.Workflow.ThreePhaseInvokableTest do
       # Check the result fact is in the graph
       result_facts =
         updated_workflow.graph
-        |> Graph.out_edges(step)
+        |> Multigraph.out_edges(step)
         |> Enum.filter(&(&1.label == :produced))
         |> Enum.map(& &1.v2)
 
@@ -174,7 +174,7 @@ defmodule Runic.Workflow.ThreePhaseInvokableTest do
 
   defp get_produced_facts(workflow, step) do
     workflow.graph
-    |> Graph.out_edges(step)
+    |> Multigraph.out_edges(step)
     |> Enum.filter(&(&1.label == :produced))
     |> Enum.map(& &1.v2)
   end

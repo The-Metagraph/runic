@@ -958,7 +958,11 @@ defmodule WorkflowTest do
       wrk = Workflow.add(wrk, state_machine, to: {"add until 10", :reaction})
 
       assert not is_nil(Workflow.get_component(wrk, "state_machine_test"))
-      assert Enum.any?(wrk.graph |> Graph.vertices(), &match?(%Runic.Workflow.Accumulator{}, &1))
+
+      assert Enum.any?(
+               wrk.graph |> Multigraph.vertices(),
+               &match?(%Runic.Workflow.Accumulator{}, &1)
+             )
     end
 
     test "productions/2 returns facts produced by the named component" do
@@ -1162,7 +1166,7 @@ defmodule WorkflowTest do
 
       assert %Step{} = step
 
-      assert Enum.any?(Graph.vertices(wrk.graph), &match?(%Workflow.Join{}, &1))
+      assert Enum.any?(Multigraph.vertices(wrk.graph), &match?(%Workflow.Join{}, &1))
     end
 
     test "a step can be added to multiple reduces assuming a join in order of `:to` names" do
@@ -1187,13 +1191,13 @@ defmodule WorkflowTest do
 
       step = Workflow.get_component(wrk, "joined_step")
 
-      join = Graph.in_edges(wrk.graph, step, by: :flow) |> List.first() |> Map.get(:v1)
+      join = Multigraph.in_edges(wrk.graph, step, by: :flow) |> List.first() |> Map.get(:v1)
 
       assert match?(%Workflow.Join{}, join)
 
-      assert Graph.in_degree(wrk.graph, join) == 2
+      assert Multigraph.in_degree(wrk.graph, join) == 2
 
-      assert match?(%Workflow.FanIn{}, Graph.in_neighbors(wrk.graph, join) |> List.first())
+      assert match?(%Workflow.FanIn{}, Multigraph.in_neighbors(wrk.graph, join) |> List.first())
     end
   end
 
@@ -1215,7 +1219,7 @@ defmodule WorkflowTest do
 
       assert not is_nil(fan_out)
 
-      # Graph.in_edges(map.pipeline.graph, fan_out, by: :component_of)
+      # Multigraph.in_edges(map.pipeline.graph, fan_out, by: :component_of)
     end
 
     test "applies the function for every item in the enumerable" do
@@ -1271,7 +1275,7 @@ defmodule WorkflowTest do
         assert is_integer(value)
       end
 
-      for node <- Graph.vertices(wrk.graph) do
+      for node <- Multigraph.vertices(wrk.graph) do
         assert not is_nil(node)
       end
 
@@ -1380,13 +1384,14 @@ defmodule WorkflowTest do
       refute is_nil(inner_fan_out)
 
       assert [%{v1: %Runic.Workflow.Map{}}] =
-               Graph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
+               Multigraph.in_edges(wrk.graph, inner_fan_out, by: :component_of)
 
-      assert Enum.count(Graph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) == 2
+      assert Enum.count(Multigraph.vertices(wrk.graph), &match?(%Runic.Workflow.FanOut{}, &1)) ==
+               2
 
       assert Workflow.next_steps(wrk, first_fan_out) |> Enum.count() == 4
 
-      assert Graph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
+      assert Multigraph.in_edges(wrk.graph, first_fan_out, by: :flow) |> Enum.count() == 1
     end
 
     test "map expressions can be named" do
@@ -2031,9 +2036,9 @@ defmodule WorkflowTest do
 
       assert Enum.any?(build_and_execution_log, &match?(%ReactionOccurred{}, &1))
 
-      edge_labels = Graph.edges(built_wrk.graph) |> Enum.map(& &1.label)
+      edge_labels = Multigraph.edges(built_wrk.graph) |> Enum.map(& &1.label)
 
-      for edge <- Graph.edges(ran_wrk.graph) do
+      for edge <- Multigraph.edges(ran_wrk.graph) do
         assert edge.label in edge_labels
       end
     end
@@ -2580,13 +2585,13 @@ defmodule WorkflowTest do
         |> Workflow.add(step3, to: :double)
 
       cg_before = Workflow.connected_components(workflow)
-      assert length(Graph.edges(cg_before)) == 2
+      assert length(Multigraph.edges(cg_before)) == 2
 
       workflow = Workflow.remove_component(workflow, :double)
 
       cg_after = Workflow.connected_components(workflow)
-      vertices = Graph.vertices(cg_after)
-      edges = Graph.edges(cg_after)
+      vertices = Multigraph.vertices(cg_after)
+      edges = Multigraph.edges(cg_after)
 
       vertex_names = Enum.map(vertices, & &1.name) |> Enum.sort()
       assert vertex_names == [:add, :subtract]
@@ -2641,8 +2646,8 @@ defmodule WorkflowTest do
 
       cg = Workflow.connected_components(workflow)
 
-      vertices = Graph.vertices(cg)
-      edges = Graph.edges(cg)
+      vertices = Multigraph.vertices(cg)
+      edges = Multigraph.edges(cg)
 
       assert length(vertices) == 3
       assert Enum.all?(vertices, fn v -> v.name in [:add, :double, :subtract] end)
@@ -2668,8 +2673,8 @@ defmodule WorkflowTest do
 
       cg = Workflow.connected_components(workflow)
 
-      vertices = Graph.vertices(cg)
-      edges = Graph.edges(cg)
+      vertices = Multigraph.vertices(cg)
+      edges = Multigraph.edges(cg)
 
       assert length(vertices) == 3
       assert length(edges) == 2
@@ -2687,8 +2692,8 @@ defmodule WorkflowTest do
 
       cg = Workflow.connected_components(workflow)
 
-      vertices = Graph.vertices(cg)
-      edges = Graph.edges(cg)
+      vertices = Multigraph.vertices(cg)
+      edges = Multigraph.edges(cg)
 
       assert length(vertices) == 1
       assert List.first(vertices).name == :alone
@@ -2706,8 +2711,8 @@ defmodule WorkflowTest do
 
       cg = Workflow.connected_components(workflow)
 
-      vertices = Graph.vertices(cg)
-      edges = Graph.edges(cg)
+      vertices = Multigraph.vertices(cg)
+      edges = Multigraph.edges(cg)
 
       assert length(vertices) == 2
       assert edges == []
@@ -2724,8 +2729,8 @@ defmodule WorkflowTest do
 
       cg = Workflow.connected_components(workflow)
 
-      vertices = Graph.vertices(cg)
-      edges = Graph.edges(cg)
+      vertices = Multigraph.vertices(cg)
+      edges = Multigraph.edges(cg)
 
       vertex_names = Enum.map(vertices, & &1.name) |> Enum.sort()
       assert vertex_names == [:classify, :increment]

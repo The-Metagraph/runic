@@ -37,7 +37,7 @@ defmodule Runic.SagaTest do
         end
 
       wrk = Workflow.new() |> Workflow.add(saga)
-      vertices = Graph.vertices(wrk.graph)
+      vertices = Multigraph.vertices(wrk.graph)
       vertex_types = Enum.map(vertices, & &1.__struct__) |> Enum.uniq()
 
       for type <- vertex_types do
@@ -394,7 +394,7 @@ defmodule Runic.SagaTest do
         end
 
       wrk = Workflow.new() |> Workflow.add(saga)
-      vertices = Graph.vertices(wrk.graph)
+      vertices = Multigraph.vertices(wrk.graph)
       vertex_types = Enum.map(vertices, & &1.__struct__) |> Enum.uniq()
 
       for type <- vertex_types do

@@ -119,7 +119,7 @@ defmodule Runic.Workflow.Serializers.DOT do
 
     standalone =
       graph
-      |> Graph.vertices()
+      |> Multigraph.vertices()
       |> Enum.reject(&match?(%Workflow.Fact{}, &1))
       |> Enum.reject(fn v -> MapSet.member?(grouped_hashes, Serializer.node_id(v)) end)
       |> Enum.reject(fn v -> Map.has_key?(component_groups, v) end)

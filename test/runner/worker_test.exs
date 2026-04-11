@@ -547,7 +547,7 @@ defmodule Runic.Runner.WorkerTest do
       # With a 3-step chain fully executed (4 facts: input + 3 produced),
       # only the leaf is hot (frontier); the rest are cold FactRefs
       fact_ref_count =
-        Graph.vertices(state.workflow.graph)
+        Multigraph.vertices(state.workflow.graph)
         |> Enum.count(fn v -> is_struct(v, Runic.Workflow.FactRef) end)
 
       assert fact_ref_count > 0
@@ -569,7 +569,7 @@ defmodule Runic.Runner.WorkerTest do
       state = :sys.get_state(pid)
 
       fact_ref_count =
-        Graph.vertices(state.workflow.graph)
+        Multigraph.vertices(state.workflow.graph)
         |> Enum.count(fn v -> is_struct(v, Runic.Workflow.FactRef) end)
 
       assert fact_ref_count == 0
