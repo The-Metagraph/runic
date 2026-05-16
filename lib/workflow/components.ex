@@ -99,10 +99,20 @@ defmodule Runic.Workflow.Components do
     end
   end
 
+  def component?(%{__struct__: _} = component),
+    do: not is_nil(Runic.Component.impl_for(component))
+
+  def component?(_component), do: false
+
   def invokable_impls do
     case Runic.Workflow.Invokable.__protocol__(:impls) do
       :not_consolidated -> []
       {:consolidated, impls} -> impls
     end
   end
+
+  def invokable?(%{__struct__: _} = invokable),
+    do: not is_nil(Runic.Workflow.Invokable.impl_for(invokable))
+
+  def invokable?(_invokable), do: false
 end

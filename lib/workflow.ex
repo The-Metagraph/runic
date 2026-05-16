@@ -661,11 +661,8 @@ defmodule Runic.Workflow do
     should_log = Keyword.get(opts, :log, true)
 
     case {component, parent} do
-      {%{__struct__: struct}, %Root{}} ->
-        if struct not in Components.component_impls() do
-          transmuted = Transmutable.to_component(component)
-          do_add_component(workflow, transmuted, parent, opts)
-        else
+      {%{__struct__: _struct}, %Root{}} ->
+        if Components.component?(component) do
           workflow = Component.connect(component, parent, workflow)
 
           if should_log do
@@ -673,13 +670,14 @@ defmodule Runic.Workflow do
           else
             workflow
           end
+        else
+          component
+          |> transmute_component!()
+          |> then(&do_add_component(workflow, &1, parent, opts))
         end
 
-      {%{__struct__: struct} = component, _parent} ->
-        if struct not in Components.component_impls() do
-          transmuted = Transmutable.to_component(component)
-          do_add_component(workflow, transmuted, parent, opts)
-        else
+      {%{__struct__: _struct} = component, _parent} ->
+        if Components.component?(component) do
           validate_ports(component, parent, opts)
 
           workflow =
@@ -692,12 +690,28 @@ defmodule Runic.Workflow do
           else
             workflow
           end
+        else
+          component
+          |> transmute_component!()
+          |> then(&do_add_component(workflow, &1, parent, opts))
         end
 
       _otherwise ->
-        transmuted = Transmutable.to_component(component)
-        do_add_component(workflow, transmuted, parent, opts)
+        component
+        |> transmute_component!()
+        |> then(&do_add_component(workflow, &1, parent, opts))
     end
+  end
+
+  defp transmute_component!(component) do
+    transmuted = Transmutable.to_component(component)
+
+    if transmuted == component do
+      raise ArgumentError,
+            "cannot add #{inspect(component)} as a Runic workflow component because it does not implement the Runic.Component protocol and cannot be transmuted into a different component"
+    end
+
+    transmuted
   end
 
   defp validate_ports(consumer, parents, opts) when is_list(parents) do
@@ -1591,16 +1605,14 @@ defmodule Runic.Workflow do
   end
 
   def connectables(%__MODULE__{graph: g} = _wrk, %{} = component) do
-    impls = Components.component_impls()
-
     arity = Components.arity_of(component)
 
     g
     |> Multigraph.vertices()
-    |> Enum.filter(fn %{__struct__: module} = v ->
+    |> Enum.filter(fn %{__struct__: _module} = v ->
       v_arity = Components.arity_of(v)
 
-      module in impls and
+      Components.component?(v) and
         v_arity == arity
     end)
   end

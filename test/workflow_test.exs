@@ -172,6 +172,27 @@ defmodule WorkflowTest do
       assert Enum.count(Workflow.next_runnables(wrk)) == 0
     end
 
+    test "add/2 accepts protocol-backed components through dynamic protocol dispatch" do
+      state_machine =
+        Runic.state_machine(
+          name: :counter,
+          init: 0,
+          reducer: fn
+            :inc, state -> state + 1
+            _event, state -> state
+          end
+        )
+
+      assert Runic.Workflow.Components.component?(state_machine)
+      assert Runic.Component.impl_for(state_machine)
+
+      workflow =
+        Workflow.new(name: "dynamic protocol component")
+        |> Workflow.add(state_machine)
+
+      assert Workflow.get_component(workflow, :counter)
+    end
+
     test "react/1 invokes one set of runnables" do
       wrk =
         Runic.workflow(
