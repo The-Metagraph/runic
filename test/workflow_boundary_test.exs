@@ -221,7 +221,9 @@ defmodule Runic.WorkflowBoundaryTest do
     end
 
     test "ports can be set directly on struct" do
-      workflow = %Workflow{Workflow.new(:test) | input_ports: [in: [type: :any]]}
+      %Workflow{} = workflow = Workflow.new(:test)
+      workflow = %Workflow{workflow | input_ports: [in: [type: :any]]}
+
       assert [{:in, _}] = Runic.Component.inputs(workflow)
     end
   end

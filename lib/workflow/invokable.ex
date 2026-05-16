@@ -984,10 +984,10 @@ defimpl Runic.Workflow.Invokable, for: Runic.Workflow.Join do
       |> Multigraph.in_edges(join)
       |> Enum.filter(&(&1.label in [:runnable, :joined]))
       |> Enum.reduce(workflow, fn
-        %{v1: v1, label: :runnable}, wrk ->
+        %{v1: v1, label: :runnable}, %Workflow{} = wrk ->
           Workflow.mark_runnable_as_ran(wrk, join, v1)
 
-        %{v1: v1, v2: v2, label: :joined}, wrk ->
+        %{v1: v1, v2: v2, label: :joined}, %Workflow{} = wrk ->
           %Workflow{
             wrk
             | graph:

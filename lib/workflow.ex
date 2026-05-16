@@ -1287,7 +1287,7 @@ defmodule Runic.Workflow do
         # Skip legacy generation edges - generation counters removed
         wrk
 
-      %ReactionOccurred{} = ro, wrk ->
+      %ReactionOccurred{} = ro, %__MODULE__{} = wrk ->
         # Rebuild getter_fn for :meta_ref edges during restoration
         properties = restore_meta_ref_properties(ro.reaction, ro.properties)
 
@@ -1804,7 +1804,7 @@ defmodule Runic.Workflow do
     end
   end
 
-  defp do_remove_component(workflow, component, component_name) do
+  defp do_remove_component(%__MODULE__{} = workflow, component, component_name) do
     # 1. Find all invokable nodes owned by this component via :component_of edges
     owned_edges = Multigraph.out_edges(workflow.graph, component, by: :component_of)
     owned_nodes = Enum.map(owned_edges, & &1.v2)

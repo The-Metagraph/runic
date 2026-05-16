@@ -6711,7 +6711,7 @@ defmodule Runic do
         import Runic
 
         reaction = unquote(reaction_step)
-        wrk = Workflow.new()
+        %Workflow{} = wrk = Workflow.new()
         wrk = %Workflow{wrk | graph: Multigraph.add_vertex(wrk.graph, reaction, reaction.hash)}
 
         unquote(build_or_branch_wiring(compiled_branches))
@@ -6910,7 +6910,7 @@ defmodule Runic do
     workflow =
       quote do
         import Runic
-        wrk = Workflow.new()
+        %Workflow{} = wrk = Workflow.new()
         reaction = unquote(reaction_step)
         %Workflow{wrk | graph: Multigraph.add_vertex(wrk.graph, reaction, reaction.hash)}
       end

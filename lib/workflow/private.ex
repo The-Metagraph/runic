@@ -35,7 +35,7 @@ defmodule Runic.Workflow.Private do
     case component do
       %Runic.Workflow.Map{components: map_components, name: map_name}
       when not is_nil(map_components) ->
-        Enum.reduce(map_components, workflow, fn {sub_name, sub_component}, acc ->
+        Enum.reduce(map_components, workflow, fn {sub_name, sub_component}, %Workflow{} = acc ->
           case sub_name do
             :fan_out ->
               components = Map.put(acc.components, {map_name, :fan_out}, sub_component.hash)

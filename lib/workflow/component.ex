@@ -286,7 +286,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
           pipeline: pipeline_workflow
         } = map,
         to,
-        workflow
+        %Workflow{} = workflow
       ) do
     fan_out_step =
       pipeline_workflow.graph
@@ -299,14 +299,15 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
       |> Workflow.register_component(map)
       |> Workflow.draw_connection(map, fan_out_step, :component_of, properties: %{kind: :fan_out})
 
-    wrk =
+    %Workflow{} =
+      wrk =
       pipeline_workflow.graph
       |> Multigraph.edges()
       |> Enum.reduce(wrk, fn
-        %{v1: %Root{}, v2: _fan_out}, wrk ->
+        %{v1: %Root{}, v2: _fan_out}, %Workflow{} = wrk ->
           wrk
 
-        %{v1: v1, v2: %Step{} = step, label: :flow}, wrk ->
+        %{v1: v1, v2: %Step{} = step, label: :flow}, %Workflow{} = wrk ->
           wrk =
             wrk
             |> Workflow.add_step(v1, step)
@@ -323,7 +324,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
 
         #   Workflow.add(wrk, nested_map, to: fan_out.hash)
 
-        %{v1: _v1, v2: %Runic.Workflow.Map{} = nested_map} = edge, wrk ->
+        %{v1: _v1, v2: %Runic.Workflow.Map{} = nested_map} = edge, %Workflow{} = wrk ->
           wrk = Map.put(wrk, :graph, Multigraph.add_edge(wrk.graph, edge))
 
           # Get the nested map's fan_out step
@@ -338,7 +339,7 @@ defimpl Runic.Component, for: Runic.Workflow.Map do
             properties: %{kind: :fan_out}
           )
 
-        %{v1: _, v2: _} = edge, wrk ->
+        %{v1: _, v2: _} = edge, %Workflow{} = wrk ->
           # for non-components such as joins, just add the edge
           %Workflow{wrk | graph: Multigraph.add_edge(wrk.graph, edge)}
       end)
@@ -805,7 +806,7 @@ defimpl Runic.Component, for: Runic.Workflow.Rule do
 
   defp resolve_condition_refs(workflow, %{condition_refs: refs, name: rule_name})
        when is_list(refs) do
-    Enum.reduce(refs, workflow, fn {ref_name, target_hash}, wrk ->
+    Enum.reduce(refs, workflow, fn {ref_name, target_hash}, %Workflow{} = wrk ->
       referenced_condition = Workflow.get_component(wrk, ref_name)
 
       if is_nil(referenced_condition) do
@@ -1741,12 +1742,12 @@ defimpl Runic.Component, for: Runic.Workflow do
   alias Runic.Workflow
   alias Runic.Workflow.Fact
 
-  def connect(%Workflow{} = child_workflow, parent_component, workflow) do
+  def connect(%Workflow{} = child_workflow, parent_component, %Workflow{} = workflow) do
     new_graph =
       child_workflow.graph
       |> Multigraph.edges()
       |> Enum.reduce(workflow.graph, fn
-        %{v1: %Runic.Workflow.Root{}, v2: _} = edge, g ->
+        %Multigraph.Edge{v1: %Runic.Workflow.Root{}, v2: _} = edge, g ->
           new_edge = %Multigraph.Edge{edge | v1: parent_component}
           Multigraph.add_edge(g, new_edge)
 
