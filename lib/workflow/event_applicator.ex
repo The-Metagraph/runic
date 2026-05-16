@@ -1,4 +1,6 @@
 defprotocol Runic.Workflow.EventApplicator do
+  @fallback_to_any true
+
   @moduledoc """
   Protocol for applying custom events to a workflow.
 
@@ -36,4 +38,13 @@ defprotocol Runic.Workflow.EventApplicator do
   """
   @spec apply(event :: struct(), workflow :: Runic.Workflow.t()) :: Runic.Workflow.t()
   def apply(event, workflow)
+end
+
+defimpl Runic.Workflow.EventApplicator, for: Any do
+  def apply(event, _workflow) do
+    raise Protocol.UndefinedError,
+      protocol: Runic.Workflow.EventApplicator,
+      value: event,
+      description: "custom workflow events must implement Runic.Workflow.EventApplicator"
+  end
 end
