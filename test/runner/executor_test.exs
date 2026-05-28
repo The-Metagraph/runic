@@ -4,6 +4,7 @@ defmodule Runic.Runner.ExecutorTest do
 
   require Runic
   alias Runic.Workflow
+  alias Runic.Workflow.RunnableFailed
 
   setup do
     runner_name = :"test_runner_exec_#{System.unique_integer([:positive])}"
@@ -180,6 +181,43 @@ defmodule Runic.Runner.ExecutorTest do
       {:ok, results} = Runic.Runner.get_results(runner, :wf_mixed)
       # 5 -> 6 -> 12
       assert 12 in results
+    end
+
+    test "policy executor: :inline emits failed runnable events only in durable mode", %{
+      runner: runner
+    } do
+      step = Runic.step(fn _x -> raise "inline boom" end, name: :failing_inline)
+
+      durable_workflow =
+        Runic.workflow(steps: [step])
+        |> Workflow.set_scheduler_policies([
+          {:failing_inline, %{executor: :inline, execution_mode: :durable, on_failure: :skip}}
+        ])
+
+      {:ok, _} = Runic.Runner.start_workflow(runner, :wf_inline_durable_fail, durable_workflow)
+      :ok = Runic.Runner.run(runner, :wf_inline_durable_fail, 5)
+      assert_workflow_idle(runner, :wf_inline_durable_fail)
+
+      {:ok, durable_wf} = Runic.Runner.get_workflow(runner, :wf_inline_durable_fail)
+      [failed] = durable_wf |> Workflow.event_log() |> Enum.filter(&match?(%RunnableFailed{}, &1))
+
+      assert failed.node_hash == step.hash
+      assert failed.failure_action == :skip
+
+      default_workflow =
+        Runic.workflow(steps: [step])
+        |> Workflow.set_scheduler_policies([
+          {:failing_inline, %{executor: :inline, on_failure: :skip}}
+        ])
+
+      {:ok, _} = Runic.Runner.start_workflow(runner, :wf_inline_default_fail, default_workflow)
+      :ok = Runic.Runner.run(runner, :wf_inline_default_fail, 5)
+      assert_workflow_idle(runner, :wf_inline_default_fail)
+
+      {:ok, default_wf} = Runic.Runner.get_workflow(runner, :wf_inline_default_fail)
+      failed = default_wf |> Workflow.event_log() |> Enum.filter(&match?(%RunnableFailed{}, &1))
+
+      assert failed == []
     end
   end
 

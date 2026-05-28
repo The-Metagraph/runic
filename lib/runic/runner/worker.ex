@@ -681,7 +681,14 @@ defmodule Runic.Runner.Worker do
         # Execute synchronously in the Worker process.
         # Skip timeout enforcement for inline (per design doc); preserve retry/fallback.
         inline_policy = %{policy | timeout_ms: :infinity}
-        result = PolicyDriver.execute(runnable, inline_policy)
+
+        # Inline must honor durable mode like build_work_fn/2 and resolve_promise_loop/5.
+        result =
+          if inline_policy.execution_mode == :durable do
+            PolicyDriver.execute(runnable, inline_policy, emit_events: true)
+          else
+            PolicyDriver.execute(runnable, inline_policy)
+          end
 
         # Simulate the async completion path synchronously
         ref = make_ref()
