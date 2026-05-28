@@ -681,7 +681,7 @@ defmodule Runic.Runner.Worker do
         # Execute synchronously in the Worker process.
         # Skip timeout enforcement for inline (per design doc); preserve retry/fallback.
         inline_policy = %{policy | timeout_ms: :infinity}
-        result = PolicyDriver.execute(runnable, inline_policy)
+        result = execute_runnable(runnable, inline_policy)
 
         # Simulate the async completion path synchronously
         ref = make_ref()
@@ -715,12 +715,16 @@ defmodule Runic.Runner.Worker do
 
   defp build_work_fn(runnable, policy) do
     fn ->
-      if policy.execution_mode == :durable do
-        PolicyDriver.execute(runnable, policy, emit_events: true)
-      else
-        PolicyDriver.execute(runnable, policy)
-      end
+      execute_runnable(runnable, policy)
     end
+  end
+
+  defp execute_runnable(runnable, %SchedulerPolicy{execution_mode: :durable} = policy) do
+    PolicyDriver.execute(runnable, policy, emit_events: true)
+  end
+
+  defp execute_runnable(runnable, policy) do
+    PolicyDriver.execute(runnable, policy)
   end
 
   # --- Promise Dispatch ---
@@ -797,12 +801,7 @@ defmodule Runic.Runner.Worker do
   defp resolve_promise_loop(promise, workflow, policies, [runnable | _rest], completed) do
     policy = SchedulerPolicy.resolve(runnable, policies)
 
-    executed =
-      if policy.execution_mode == :durable do
-        PolicyDriver.execute(runnable, policy, emit_events: true)
-      else
-        PolicyDriver.execute(runnable, policy)
-      end
+    executed = execute_runnable(runnable, policy)
 
     # Normalize to {runnable, events}
     {executed_runnable, _events} =
@@ -845,11 +844,7 @@ defmodule Runic.Runner.Worker do
       policy = SchedulerPolicy.resolve(runnable, policies)
 
       try do
-        if policy.execution_mode == :durable do
-          PolicyDriver.execute(runnable, policy, emit_events: true)
-        else
-          PolicyDriver.execute(runnable, policy)
-        end
+        execute_runnable(runnable, policy)
       rescue
         e ->
           Runnable.fail(runnable, {:execution_error, e})
