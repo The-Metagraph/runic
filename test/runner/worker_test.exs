@@ -368,6 +368,95 @@ defmodule Runic.Runner.WorkerTest do
       assert Enum.sort(original_results) == Enum.sort(resumed_results)
     end
 
+    test "resume uses workflow snapshot plus cursor-aware tail stream when available" do
+      runner = :"test_runner_snapshot_tail_#{System.unique_integer([:positive])}"
+
+      start_supervised!(
+        {Runic.Runner, name: runner, store: Runic.TestSupport.SnapshotTailStore},
+        id: runner
+      )
+
+      workflow_id = :wf_snapshot_tail
+      {snapshot_workflow, cursor, events} = build_snapshot_tail_fixture()
+      {store_mod, store_state} = Runic.Runner.get_store(runner)
+
+      assert {:ok, _cursor} = store_mod.append(workflow_id, events, store_state)
+
+      assert :ok =
+               store_mod.save_snapshot(
+                 workflow_id,
+                 cursor,
+                 Runic.Runner.encode_snapshot(snapshot_workflow),
+                 store_state
+               )
+
+      assert {:ok, _pid} = Runic.Runner.resume(runner, workflow_id)
+      assert {:ok, results} = Runic.Runner.get_results(runner, workflow_id)
+      assert 12 in results
+
+      assert store_mod.call_count(store_state, {:stream_after, workflow_id}) == 1
+      assert store_mod.call_count(store_state, {:stream, workflow_id}) == 0
+    end
+
+    test "resume ignores snapshots when the store has no cursor-aware tail stream" do
+      runner = :"test_runner_snapshot_no_tail_#{System.unique_integer([:positive])}"
+
+      start_supervised!(
+        {Runic.Runner, name: runner, store: Runic.TestSupport.SnapshotStoreWithoutTail},
+        id: runner
+      )
+
+      workflow_id = :wf_snapshot_no_tail
+      {snapshot_workflow, cursor, events} = build_snapshot_tail_fixture()
+      {store_mod, store_state} = Runic.Runner.get_store(runner)
+
+      assert {:ok, _cursor} = store_mod.append(workflow_id, events, store_state)
+
+      assert :ok =
+               store_mod.save_snapshot(
+                 workflow_id,
+                 cursor,
+                 Runic.Runner.encode_snapshot(snapshot_workflow),
+                 store_state
+               )
+
+      assert {:ok, _pid} = Runic.Runner.resume(runner, workflow_id)
+      assert {:ok, results} = Runic.Runner.get_results(runner, workflow_id)
+      assert 12 in results
+
+      assert store_mod.call_count(store_state, {:stream, workflow_id}) == 1
+    end
+
+    test "resume falls back to full stream when snapshot blob is not a Runic workflow snapshot" do
+      runner = :"test_runner_invalid_snapshot_#{System.unique_integer([:positive])}"
+
+      start_supervised!(
+        {Runic.Runner, name: runner, store: Runic.TestSupport.SnapshotTailStore},
+        id: runner
+      )
+
+      workflow_id = :wf_invalid_snapshot
+      {_snapshot_workflow, cursor, events} = build_snapshot_tail_fixture()
+      {store_mod, store_state} = Runic.Runner.get_store(runner)
+
+      assert {:ok, _cursor} = store_mod.append(workflow_id, events, store_state)
+
+      assert :ok =
+               store_mod.save_snapshot(
+                 workflow_id,
+                 cursor,
+                 :erlang.term_to_binary({:legacy_event_log_snapshot, []}),
+                 store_state
+               )
+
+      assert {:ok, _pid} = Runic.Runner.resume(runner, workflow_id)
+      assert {:ok, results} = Runic.Runner.get_results(runner, workflow_id)
+      assert 12 in results
+
+      assert store_mod.call_count(store_state, {:stream_after, workflow_id}) == 0
+      assert store_mod.call_count(store_state, {:stream, workflow_id}) == 1
+    end
+
     test "stop with persist: true (default) saves final state", %{runner: runner} do
       workflow = build_single_step_workflow()
       {:ok, _} = Runic.Runner.start_workflow(runner, :wf_persist_stop, workflow)
@@ -623,6 +712,27 @@ defmodule Runic.Runner.WorkerTest do
   defp build_single_step_workflow do
     step = Runic.step(fn x -> x + 1 end, name: :add_one)
     Runic.workflow(steps: [step])
+  end
+
+  defp build_snapshot_tail_fixture do
+    step_a = Runic.step(fn x -> x + 1 end, name: :snapshot_a)
+    step_b = Runic.step(fn x -> x * 2 end, name: :snapshot_b)
+
+    workflow =
+      Runic.workflow(steps: [{step_a, [step_b]}])
+      |> Workflow.enable_event_emission()
+
+    snapshot_events = Workflow.build_log(workflow)
+    snapshot_workflow = Workflow.from_events(snapshot_events)
+    cursor = length(snapshot_events)
+
+    tail_events =
+      workflow
+      |> Workflow.react_until_satisfied(5)
+      |> Map.fetch!(:uncommitted_events)
+      |> Enum.reverse()
+
+    {snapshot_workflow, cursor, snapshot_events ++ tail_events}
   end
 
   defp assert_workflow_idle(runner, workflow_id, timeout \\ 2000) do

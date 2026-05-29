@@ -14,6 +14,10 @@ defmodule Runic.Runner.Store do
   Stores that implement `append/3` and `stream/2` get automatic
   event-sourced checkpointing and recovery from the Worker.
 
+  `stream/2` must always return the full event stream for a workflow. Stores
+  that support snapshot-accelerated recovery can additionally implement
+  `stream_after/3` to return only events after a saved snapshot cursor.
+
   ## Legacy Semantics (Snapshot)
 
   The `save/3` and `load/2` callbacks persist the full workflow log as a
@@ -23,7 +27,7 @@ defmodule Runic.Runner.Store do
 
   ## Optional Capabilities
 
-  - **Snapshots** (`save_snapshot/4`, `load_snapshot/3`): Point-in-time
+  - **Snapshots** (`save_snapshot/4`, `load_snapshot/2`): Point-in-time
     workflow snapshots for faster recovery (replay from snapshot + events
     after cursor instead of full replay).
   - **Fact storage** (`save_fact/3`, `load_fact/2`): Content-addressed fact
@@ -45,6 +49,8 @@ defmodule Runic.Runner.Store do
   @callback append(workflow_id(), events :: [event()], state()) ::
               {:ok, cursor()} | {:error, term()}
   @callback stream(workflow_id(), state()) ::
+              {:ok, Enumerable.t()} | {:error, :not_found | term()}
+  @callback stream_after(workflow_id(), cursor(), state()) ::
               {:ok, Enumerable.t()} | {:error, :not_found | term()}
 
   # Snapshot (optional — faster recovery with stream semantics)
@@ -68,6 +74,7 @@ defmodule Runic.Runner.Store do
   @optional_callbacks [
     append: 3,
     stream: 2,
+    stream_after: 3,
     save_snapshot: 4,
     load_snapshot: 2,
     save_fact: 3,
@@ -84,5 +91,22 @@ defmodule Runic.Runner.Store do
   @spec supports_stream?(module()) :: boolean()
   def supports_stream?(store_mod) do
     function_exported?(store_mod, :append, 3) and function_exported?(store_mod, :stream, 2)
+  end
+
+  @doc """
+  Returns true if the store module supports cursor-aware stream replay.
+  """
+  @spec supports_stream_after?(module()) :: boolean()
+  def supports_stream_after?(store_mod) do
+    function_exported?(store_mod, :stream_after, 3)
+  end
+
+  @doc """
+  Returns true if the store module supports snapshot save/load semantics.
+  """
+  @spec supports_snapshots?(module()) :: boolean()
+  def supports_snapshots?(store_mod) do
+    function_exported?(store_mod, :save_snapshot, 4) and
+      function_exported?(store_mod, :load_snapshot, 2)
   end
 end
