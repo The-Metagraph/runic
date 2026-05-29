@@ -52,6 +52,11 @@ defmodule Runic.Runner do
 
   use Supervisor
 
+  alias Runic.Workflow
+
+  @snapshot_tag :runic_workflow_snapshot
+  @snapshot_version 1
+
   # --- Public API ---
 
   def start_link(opts) do
@@ -236,10 +241,43 @@ defmodule Runic.Runner do
   end
 
   @doc """
+  Encodes a workflow snapshot for stores implementing `Runic.Runner.Store`.
+
+  The encoded format is tagged and versioned so `resume/3` can distinguish
+  Runic workflow snapshots from legacy adapter-specific blobs.
+  """
+  @spec encode_snapshot(Workflow.t()) :: binary()
+  def encode_snapshot(%Workflow{} = workflow) do
+    :erlang.term_to_binary({@snapshot_tag, @snapshot_version, workflow})
+  end
+
+  @doc """
+  Decodes a workflow snapshot produced by `encode_snapshot/1`.
+  """
+  @spec decode_snapshot(binary()) ::
+          {:ok, Workflow.t()} | {:error, :invalid_snapshot | {:unsupported_snapshot, term()}}
+  def decode_snapshot(snapshot) when is_binary(snapshot) do
+    case :erlang.binary_to_term(snapshot) do
+      {@snapshot_tag, @snapshot_version, %Workflow{} = workflow} ->
+        {:ok, workflow}
+
+      {@snapshot_tag, version, _workflow} ->
+        {:error, {:unsupported_snapshot, version}}
+
+      _other ->
+        {:error, :invalid_snapshot}
+    end
+  rescue
+    ArgumentError -> {:error, :invalid_snapshot}
+  end
+
+  @doc """
   Resumes a workflow from persisted state.
 
-  Loads the workflow log from the store, rebuilds the workflow via
-  `Workflow.from_log/1`, and starts a new Worker.
+  Loads persisted workflow state from the configured store and starts a new
+  Worker. Event-sourced stores are replayed through `Workflow.from_events/2`.
+  Stores that implement snapshots plus cursor-aware replay can resume from a
+  saved workflow snapshot and replay only events after its cursor.
 
   ## Options
 
@@ -256,14 +294,11 @@ defmodule Runic.Runner do
     {store_mod, store_state} = get_store(runner)
 
     if Runic.Runner.Store.supports_stream?(store_mod) do
-      case store_mod.stream(workflow_id, store_state) do
-        {:ok, event_stream} ->
-          rehydration = Keyword.get(opts, :rehydration, :full)
-          store = {store_mod, store_state}
-          events = Enum.to_list(event_stream)
+      rehydration = Keyword.get(opts, :rehydration, :full)
+      store = {store_mod, store_state}
 
-          {workflow, resolver} = resume_from_events(events, rehydration, store)
-
+      case resume_from_streaming_store(workflow_id, rehydration, store) do
+        {:ok, workflow, resolver} ->
           worker_opts =
             opts
             |> Keyword.put(:resumed, true)
@@ -283,7 +318,71 @@ defmodule Runic.Runner do
     end
   end
 
-  defp resume_from_events(events, :full, store) do
+  defp resume_from_streaming_store(workflow_id, rehydration, {store_mod, store_state} = store) do
+    if Runic.Runner.Store.supports_snapshots?(store_mod) and
+         Runic.Runner.Store.supports_stream_options?(store_mod) do
+      case store_mod.load_snapshot(workflow_id, store_state) do
+        {:ok, {cursor, snapshot}} ->
+          resume_from_snapshot(workflow_id, cursor, snapshot, rehydration, store)
+
+        {:error, :not_found} ->
+          resume_from_full_stream(workflow_id, rehydration, store)
+
+        {:error, _} = error ->
+          error
+      end
+    else
+      resume_from_full_stream(workflow_id, rehydration, store)
+    end
+  end
+
+  defp resume_from_snapshot(workflow_id, cursor, snapshot, rehydration, store) do
+    case decode_snapshot(snapshot) do
+      {:ok, %Workflow{} = base_workflow} ->
+        resume_from_snapshot_tail(workflow_id, cursor, base_workflow, rehydration, store)
+
+      {:error, _reason} ->
+        resume_from_full_stream(workflow_id, rehydration, store)
+    end
+  end
+
+  defp resume_from_snapshot_tail(
+         workflow_id,
+         cursor,
+         %Workflow{} = base_workflow,
+         rehydration,
+         {store_mod, store_state} = store
+       ) do
+    case store_mod.stream(workflow_id, store_state, after_cursor: cursor) do
+      {:ok, event_stream} ->
+        events = Enum.to_list(event_stream)
+        {workflow, resolver} = resume_from_events(events, rehydration, store, base_workflow)
+        {:ok, workflow, resolver}
+
+      {:error, :not_found} ->
+        {workflow, resolver} = resume_from_events([], rehydration, store, base_workflow)
+        {:ok, workflow, resolver}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp resume_from_full_stream(workflow_id, rehydration, {store_mod, store_state} = store) do
+    case store_mod.stream(workflow_id, store_state) do
+      {:ok, event_stream} ->
+        events = Enum.to_list(event_stream)
+        {workflow, resolver} = resume_from_events(events, rehydration, store)
+        {:ok, workflow, resolver}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp resume_from_events(events, rehydration, store, base_workflow \\ nil)
+
+  defp resume_from_events(events, :full, store, base_workflow) do
     # Check if any FactProduced events have been stripped of values
     has_stripped =
       Enum.any?(events, fn
@@ -293,35 +392,35 @@ defmodule Runic.Runner do
 
     if has_stripped do
       # Lean replay + resolve all facts to restore full in-memory state
-      workflow = Runic.Workflow.from_events(events, nil, fact_mode: :ref)
+      workflow = Workflow.from_events(events, base_workflow, fact_mode: :ref)
 
       all_ref_hashes =
-        for {hash, %Runic.Workflow.FactRef{}} <- workflow.graph.vertices,
+        for {hash, %Workflow.FactRef{}} <- workflow.graph.vertices,
             into: MapSet.new(),
             do: hash
 
-      resolver = Runic.Workflow.FactResolver.new(store)
+      resolver = Workflow.FactResolver.new(store)
 
       {workflow, _resolver} =
-        Runic.Workflow.Rehydration.resolve_hot(workflow, all_ref_hashes, resolver)
+        Workflow.Rehydration.resolve_hot(workflow, all_ref_hashes, resolver)
 
       {workflow, nil}
     else
-      {Runic.Workflow.from_events(events), nil}
+      {Workflow.from_events(events, base_workflow), nil}
     end
   end
 
-  defp resume_from_events(events, :hybrid, store) do
-    workflow = Runic.Workflow.from_events(events, nil, fact_mode: :ref)
-    %{hot: hot} = Runic.Workflow.Rehydration.classify(workflow)
-    resolver = Runic.Workflow.FactResolver.new(store)
-    {workflow, resolver} = Runic.Workflow.Rehydration.resolve_hot(workflow, hot, resolver)
+  defp resume_from_events(events, :hybrid, store, base_workflow) do
+    workflow = Workflow.from_events(events, base_workflow, fact_mode: :ref)
+    %{hot: hot} = Workflow.Rehydration.classify(workflow)
+    resolver = Workflow.FactResolver.new(store)
+    {workflow, resolver} = Workflow.Rehydration.resolve_hot(workflow, hot, resolver)
     {workflow, resolver}
   end
 
-  defp resume_from_events(events, :lazy, store) do
-    workflow = Runic.Workflow.from_events(events, nil, fact_mode: :ref)
-    {workflow, Runic.Workflow.FactResolver.new(store)}
+  defp resume_from_events(events, :lazy, store, base_workflow) do
+    workflow = Workflow.from_events(events, base_workflow, fact_mode: :ref)
+    {workflow, Workflow.FactResolver.new(store)}
   end
 
   defp resume_from_log(runner, workflow_id, store_mod, store_state, opts) do
