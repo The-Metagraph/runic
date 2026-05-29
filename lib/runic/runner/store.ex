@@ -14,6 +14,23 @@ defmodule Runic.Runner.Store do
   Stores that implement `append/3` and `stream/2` get automatic
   event-sourced checkpointing and recovery from the Worker.
 
+  `stream/2` must always return the full event stream for a workflow. Stores
+  that support cursor-aware or windowed replay can additionally implement
+  `stream/3` with options.
+
+  Supported `stream/3` options:
+
+    * `:after_cursor` — exclusive lower bound. `after_cursor: 10` returns
+      events with sequence/cursor greater than `10`.
+    * `:limit` — optional maximum number of events to return. Adapters may
+      ignore this when their backing stream does not support bounded reads.
+    * `:batch_size` — optional page-size hint for stores that fetch event rows
+      in batches.
+
+  `stream/3` should be a superset of `stream/2`: calling it with an empty
+  option list should return the full stream. Adapters should ignore unknown
+  options they do not support.
+
   ## Legacy Semantics (Snapshot)
 
   The `save/3` and `load/2` callbacks persist the full workflow log as a
@@ -23,7 +40,7 @@ defmodule Runic.Runner.Store do
 
   ## Optional Capabilities
 
-  - **Snapshots** (`save_snapshot/4`, `load_snapshot/3`): Point-in-time
+  - **Snapshots** (`save_snapshot/4`, `load_snapshot/2`): Point-in-time
     workflow snapshots for faster recovery (replay from snapshot + events
     after cursor instead of full replay).
   - **Fact storage** (`save_fact/3`, `load_fact/2`): Content-addressed fact
@@ -35,6 +52,11 @@ defmodule Runic.Runner.Store do
   @type cursor :: non_neg_integer()
   @type log :: [struct()]
   @type state :: term()
+  @type stream_opts :: [
+          after_cursor: cursor(),
+          limit: pos_integer(),
+          batch_size: pos_integer()
+        ]
 
   # Core (required) — snapshot-based
   @callback init_store(opts :: keyword()) :: {:ok, state()} | {:error, term()}
@@ -45,6 +67,8 @@ defmodule Runic.Runner.Store do
   @callback append(workflow_id(), events :: [event()], state()) ::
               {:ok, cursor()} | {:error, term()}
   @callback stream(workflow_id(), state()) ::
+              {:ok, Enumerable.t()} | {:error, :not_found | term()}
+  @callback stream(workflow_id(), state(), stream_opts()) ::
               {:ok, Enumerable.t()} | {:error, :not_found | term()}
 
   # Snapshot (optional — faster recovery with stream semantics)
@@ -68,6 +92,7 @@ defmodule Runic.Runner.Store do
   @optional_callbacks [
     append: 3,
     stream: 2,
+    stream: 3,
     save_snapshot: 4,
     load_snapshot: 2,
     save_fact: 3,
@@ -84,5 +109,22 @@ defmodule Runic.Runner.Store do
   @spec supports_stream?(module()) :: boolean()
   def supports_stream?(store_mod) do
     function_exported?(store_mod, :append, 3) and function_exported?(store_mod, :stream, 2)
+  end
+
+  @doc """
+  Returns true if the store module supports option-aware stream replay.
+  """
+  @spec supports_stream_options?(module()) :: boolean()
+  def supports_stream_options?(store_mod) do
+    function_exported?(store_mod, :stream, 3)
+  end
+
+  @doc """
+  Returns true if the store module supports snapshot save/load semantics.
+  """
+  @spec supports_snapshots?(module()) :: boolean()
+  def supports_snapshots?(store_mod) do
+    function_exported?(store_mod, :save_snapshot, 4) and
+      function_exported?(store_mod, :load_snapshot, 2)
   end
 end
