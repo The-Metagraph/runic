@@ -394,7 +394,7 @@ defmodule Runic.Runner.WorkerTest do
       assert {:ok, results} = Runic.Runner.get_results(runner, workflow_id)
       assert 12 in results
 
-      assert store_mod.call_count(store_state, {:stream_after, workflow_id}) == 1
+      assert store_mod.call_count(store_state, {:stream, workflow_id, :after_cursor}) == 1
       assert store_mod.call_count(store_state, {:stream, workflow_id}) == 0
     end
 
@@ -453,7 +453,7 @@ defmodule Runic.Runner.WorkerTest do
       assert {:ok, results} = Runic.Runner.get_results(runner, workflow_id)
       assert 12 in results
 
-      assert store_mod.call_count(store_state, {:stream_after, workflow_id}) == 0
+      assert store_mod.call_count(store_state, {:stream, workflow_id, :after_cursor}) == 0
       assert store_mod.call_count(store_state, {:stream, workflow_id}) == 1
     end
 

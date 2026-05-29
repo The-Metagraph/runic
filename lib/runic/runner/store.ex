@@ -15,8 +15,21 @@ defmodule Runic.Runner.Store do
   event-sourced checkpointing and recovery from the Worker.
 
   `stream/2` must always return the full event stream for a workflow. Stores
-  that support snapshot-accelerated recovery can additionally implement
-  `stream_after/3` to return only events after a saved snapshot cursor.
+  that support cursor-aware or windowed replay can additionally implement
+  `stream/3` with options.
+
+  Supported `stream/3` options:
+
+    * `:after_cursor` — exclusive lower bound. `after_cursor: 10` returns
+      events with sequence/cursor greater than `10`.
+    * `:limit` — optional maximum number of events to return. Adapters may
+      ignore this when their backing stream does not support bounded reads.
+    * `:batch_size` — optional page-size hint for stores that fetch event rows
+      in batches.
+
+  `stream/3` should be a superset of `stream/2`: calling it with an empty
+  option list should return the full stream. Adapters should ignore unknown
+  options they do not support.
 
   ## Legacy Semantics (Snapshot)
 
@@ -39,6 +52,11 @@ defmodule Runic.Runner.Store do
   @type cursor :: non_neg_integer()
   @type log :: [struct()]
   @type state :: term()
+  @type stream_opts :: [
+          after_cursor: cursor(),
+          limit: pos_integer(),
+          batch_size: pos_integer()
+        ]
 
   # Core (required) — snapshot-based
   @callback init_store(opts :: keyword()) :: {:ok, state()} | {:error, term()}
@@ -50,7 +68,7 @@ defmodule Runic.Runner.Store do
               {:ok, cursor()} | {:error, term()}
   @callback stream(workflow_id(), state()) ::
               {:ok, Enumerable.t()} | {:error, :not_found | term()}
-  @callback stream_after(workflow_id(), cursor(), state()) ::
+  @callback stream(workflow_id(), state(), stream_opts()) ::
               {:ok, Enumerable.t()} | {:error, :not_found | term()}
 
   # Snapshot (optional — faster recovery with stream semantics)
@@ -74,7 +92,7 @@ defmodule Runic.Runner.Store do
   @optional_callbacks [
     append: 3,
     stream: 2,
-    stream_after: 3,
+    stream: 3,
     save_snapshot: 4,
     load_snapshot: 2,
     save_fact: 3,
@@ -94,11 +112,11 @@ defmodule Runic.Runner.Store do
   end
 
   @doc """
-  Returns true if the store module supports cursor-aware stream replay.
+  Returns true if the store module supports option-aware stream replay.
   """
-  @spec supports_stream_after?(module()) :: boolean()
-  def supports_stream_after?(store_mod) do
-    function_exported?(store_mod, :stream_after, 3)
+  @spec supports_stream_options?(module()) :: boolean()
+  def supports_stream_options?(store_mod) do
+    function_exported?(store_mod, :stream, 3)
   end
 
   @doc """

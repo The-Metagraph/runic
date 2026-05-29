@@ -53,9 +53,9 @@ defmodule Runic.TestSupport.SnapshotTailStore do
   end
 
   @impl Runic.Runner.Store
-  def stream_after(workflow_id, cursor, %{calls_table: calls_table} = state)
-      when is_integer(cursor) do
-    increment_call(calls_table, {:stream_after, workflow_id})
+  def stream(workflow_id, %{calls_table: calls_table} = state, opts) when is_list(opts) do
+    cursor = Keyword.get(opts, :after_cursor, 0)
+    increment_call(calls_table, {:stream, workflow_id, opts_key(opts)})
     stream_from(workflow_id, cursor + 1, state)
   end
 
@@ -112,6 +112,13 @@ defmodule Runic.TestSupport.SnapshotTailStore do
 
   defp increment_call(calls_table, key) do
     :ets.update_counter(calls_table, key, {2, 1}, {key, 0})
+  end
+
+  defp opts_key(opts) do
+    cond do
+      Keyword.has_key?(opts, :after_cursor) -> :after_cursor
+      true -> :opts
+    end
   end
 
   defp ensure_table(table, opts) do

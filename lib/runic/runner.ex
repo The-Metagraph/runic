@@ -320,7 +320,7 @@ defmodule Runic.Runner do
 
   defp resume_from_streaming_store(workflow_id, rehydration, {store_mod, store_state} = store) do
     if Runic.Runner.Store.supports_snapshots?(store_mod) and
-         Runic.Runner.Store.supports_stream_after?(store_mod) do
+         Runic.Runner.Store.supports_stream_options?(store_mod) do
       case store_mod.load_snapshot(workflow_id, store_state) do
         {:ok, {cursor, snapshot}} ->
           resume_from_snapshot(workflow_id, cursor, snapshot, rehydration, store)
@@ -353,7 +353,7 @@ defmodule Runic.Runner do
          rehydration,
          {store_mod, store_state} = store
        ) do
-    case store_mod.stream_after(workflow_id, cursor, store_state) do
+    case store_mod.stream(workflow_id, store_state, after_cursor: cursor) do
       {:ok, event_stream} ->
         events = Enum.to_list(event_stream)
         {workflow, resolver} = resume_from_events(events, rehydration, store, base_workflow)
